@@ -22,9 +22,17 @@ Clone alternativo: git clone https://github.com/SrTristeSad/Paint-Lua.git (sem -
 
 ## Situação funcional
 
-A UI disponibiliza tela inicial, galeria, New Canvas, ferramentas, janelas de pincel, cores e camadas. O motor é responsável por pixels reais: **pintura básica, borracha, camadas simples, desfazer/refazer e salvar/reabrir .npnt**. Zoom, rotação e pan usam a UI. Vários controles de filtros, transformações, máscaras, grupos e galeria **ainda são demonstrativos ou parcialmente integrados**. Não se deve assumir que um botão que existe na interface altera pixels.
+A UI disponibiliza tela inicial, galeria, New Canvas, ferramentas, janelas de pincel, cores e camadas. O motor é responsável por pixels reais: **pintura, borracha, balde cooperativo, conta-gotas, Alpha Lock durante a sessão, camadas, recorte, desfazer/refazer e salvar/reabrir .npnt**. Zoom, rotação e pan usam a UI. Vários controles de filtros, transformações, máscaras, grupos e galeria **ainda são demonstrativos ou parcialmente integrados**. Não se deve assumir que um botão que existe na interface altera pixels.
 
-O núcleo v0.21 registrou 777 testes históricos com mocks. A integração básica passou em **LÖVE 11.5 real em Linux sob display virtual**, incluindo pincel, undo/redo e NPNT. Ainda são necessários testes manuais no Windows, desempenho e uso de caneta/tablet.
+A base v0.21 registrou 777 testes históricos com mocks. A integração v0.22 incorporou testes novos de Alpha Lock e sincronização de camadas; o pacote de desenvolvimento local passou em **806 verificações simuladas** (a bateria completa antiga ainda não está versionada neste repositório). A integração básica passou em **LÖVE 11.5 real em Linux sob display virtual**, incluindo pincel, undo/redo e NPNT. Ainda são necessários testes manuais no Windows, desempenho e uso de caneta/tablet.
+
+## Novidades da integração v0.22
+
+- **Balde:** usa o preenchimento scanline cooperativo do núcleo, distribuído em fatias por quadro; **Esc** cancela a operação, com rollback.
+- **Conta-gotas:** amostra a cor composta dos pixels do desenho e atualiza o seletor de cores da interface.
+- **Alpha Lock:** o pincel muda somente a cor dos pixels já opacos, sem criar novos pixels transparentes. A borracha não altera o alfa quando a trava está ativa.
+- **Camadas:** visibilidade, clipping e blending alteram a composição real e entram no histórico; o slider de opacidade não cria centenas de entradas de undo. Desfazer/refazer atualiza também o estado do painel.
+- **Limites conhecidos:** Alpha Lock e a flag de camada bloqueada ainda são estados da interface, **não persistem em .npnt**; o balde é bloqueado quando Alpha Lock está ligado. Os thumbnails das camadas e as amostras de pincéis continuam ilustrativos. Não há testes de FPS/tablet/Windows nem paridade de Alpha Lock no caminho FFI; nesse modo o pincel usa o caminho Lua.
 
 ## Créditos e continuidade
 

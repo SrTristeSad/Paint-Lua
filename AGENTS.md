@@ -6,4 +6,4 @@
 - Preserve decisões, APIs, formato NPNT1–NPNT4, testes, código editável e atribuições.
 - DragonBones/Bono-Lua não deve ser reinserido: não é dependência atual.
 - Faça teste no LÖVE real quando possível; distinga do teste com mocks e não prometa FPS.
-- Integre ferramentas gradualmente sem substituir o núcleo.
+- Integre ferramentas gradualmente sem substituir o núcleo. A v0.22 usa Fill.newJob para balde, amostragem do compositor para conta-gotas e Alpha Lock em Lua. Confira compatibilidade em mudanças de pincel.

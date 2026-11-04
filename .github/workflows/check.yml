@@ -1,7 +1,7 @@
 name: Testes Paint-Lua unificado
 on:
   push:
-    branches: [main, integrate/ibis-unified]
+    branches: [main, integrate/ibis-unified, feature/paint-v022-tools]
   pull_request:
 jobs:
   checks:
