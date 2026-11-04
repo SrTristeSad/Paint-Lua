@@ -48,6 +48,6 @@ No Windows também é possível executar o script `scripts/prepare-core.ps1` man
 
 ## Qualidade, proveniência e limites
 
-A versão anterior do núcleo registrou **777 testes aprovados em `texlua` com mocks**. Essa contagem é histórica; **não comprova que a integração atual já foi validada no LÖVE 11.5 real**. Teste com desenho, camadas, zoom, rotação, desfazer e salvar/abrir antes de confiar em trabalhos importantes.
+O núcleo v0.21 registrou **777 testes históricos em `texlua` com mocks**. Além disso, o **GitHub Actions passou em LÖVE 11.5 real, sob display virtual Linux**, verificando abertura da UI, pincel com `ImageData` real, desfazer/refazer e salvamento/reabertura `.npnt`. Isso **não comprova desempenho nem funcionamento no Windows ou em dispositivos móveis**: faça testes manuais antes de confiar em trabalhos importantes.
 
 [PhotoCraft](https://github.com/storytold/photocraft) é referência técnica e [ibisPaint](https://ibispaint.com/) é referência funcional; ambos são projetos diferentes. O Ibis-Lua é um projeto do mesmo criador, não o aplicativo oficial. Consulte [ORIGENS.md](ORIGENS.md), as licenças de ícones Lucide em `vendor/Ibis-Lua/assets/icons/LICENSE-LUCIDE.txt` e `LICENSE-PHOTOCRAFT-MIT.txt`.

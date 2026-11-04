@@ -13,7 +13,7 @@ PhotoCraft (Rust) é **referência técnica** para conceitos reimplementados em 
 ## Estado técnico
 
 - Motor v0.21: pincéis com pressão, estabilização, texturas, simetria, mistura de tinta simplificada; camadas, máscaras, mesclagens, grupos aninhados, histórico, preenchimento e composição por tiles e cache; formato `.npnt` (NPNT1–NPNT4).
-- **777 testes históricos em texlua com mocks**, não no LÖVE real.
+- **777 testes históricos em texlua com mocks**. A integração nova também passou em CI com **LÖVE 11.5 real no Linux headless** (UI, pincel, undo/redo e NPNT). Windows, latência, FPS e dispositivos móveis não foram validados.
 - Interface Ibis-Lua: galeria, novo canvas, ferramentas e painéis, com muitas operações **ainda simuladas**.
 - Integração inicial: canvas real, mouse/borracha, cores/tamanho/opacidade, camadas básicas e atalhos para histórico e salvar/abrir. Não afirmar que todas as ferramentas do Ibis-Lua estão integradas ao motor.
 - Próxima prioridade: executar no LÖVE 11.5 real, corrigir a integração, adicionar testes de ponta a ponta e conectar opções do painel ao motor de forma incremental.
