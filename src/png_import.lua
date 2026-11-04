@@ -119,6 +119,34 @@ local function bilinear(pixels,w,h,u,v)
     (b00*a00*w00+b10*a10*w10+b01*a01*w01+b11*a11*w11)/aa,aa
 end
 
+-- Antialias de bordas inclinadas na importação suave (v0.32).
+-- Duas amostras por eixo em pixels internos e quatro por eixo junto ao
+-- contorno, onde a cobertura parcial é mais visível. RGB acumula em alfa
+-- pré-multiplicado: não cria franjas a partir de pixels transparentes.
+-- Para ângulos ortogonais, mantemos a amostragem bilinear v0.31 idêntica.
+local function rotatedSmooth(pixels,w,h,session,x,y,padU,padV)
+  local ux,uy=Transform.inverse(session,x+0.5,y+0.5)
+  local u,v=ux-session.x,uy-session.y
+  if u < -padU or u > w+padU or v < -padV or v > h+padV then
+    return 0,0,0,0
+  end
+  local border=(u<padU or u>w-padU or v<padV or v>h-padV)
+  local n=border and 4 or 2
+  local pr,pg,pb,alpha=0,0,0,0
+  for yy=0,n-1 do
+    for xx=0,n-1 do
+      local sx,sy=Transform.inverse(session,x+(xx+0.5)/n,y+(yy+0.5)/n)
+      local su,sv=sx-session.x,sy-session.y
+      if su>=0 and sv>=0 and su<w and sv<h then
+        local r,g,b,a=bilinear(pixels,w,h,su,sv)
+        pr=pr+r*a;pg=pg+g*a;pb=pb+b*a;alpha=alpha+a
+      end
+    end
+  end
+  if alpha<=0 then return 0,0,0,0 end
+  return pr/alpha,pg/alpha,pb/alpha,alpha/(n*n)
+end
+
 -- Posiciona a imagem no centro do canvas. Partes fora do documento são
 -- recortadas; pixels transparentes não criam tiles desnecessários.
 function Import.insert(doc, pixels, filename, placement)
@@ -151,15 +179,27 @@ function Import.insert(doc, pixels, filename, placement)
   local title='PNG: '..displayName(filename)
   local detached=Doc.newLayer(title)
   local marked,painted={},0
+  -- Somente rotações não ortogonais exigem supersampling; isto evita
+  -- suavizar as cores de PNGs importados sem rotação na escala 1:1.
+  local oblique=session.interpolation=='smooth'
+    and math.abs(math.sin(session.angle*2))>1e-8
+  local padU,padV=0,0
+  if oblique then
+    local c,s=math.abs(math.cos(session.angle)),math.abs(math.sin(session.angle))
+    padU=(c+s)/(2*math.abs(session.scaleX))
+    padV=(c+s)/(2*math.abs(session.scaleY))
+  end
   -- Qualquer falha de alocação é isolada nesta camada temporária.
   local copied,reason=pcall(function()
     for y=y0,y1-1 do
       for x=x0,x1-1 do
         local sx,sy=Transform.inverse(session,x+0.5,y+0.5)
         local ix,iy=floor(sx-session.x),floor(sy-session.y)
-        if ix>=0 and iy>=0 and ix<w and iy<h then
+        if oblique or (ix>=0 and iy>=0 and ix<w and iy<h) then
           local r,g,b,a
-          if session.interpolation=='smooth' then
+          if oblique then
+            r,g,b,a=rotatedSmooth(pixels,w,h,session,x,y,padU,padV)
+          elseif session.interpolation=='smooth' then
             r,g,b,a=bilinear(pixels,w,h,sx-session.x,sy-session.y)
           else
             r,g,b,a=pixels:getPixel(ix,iy)

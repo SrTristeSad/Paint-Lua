@@ -1312,6 +1312,27 @@ local function editor_screen()
         -- A prévia na GPU e o resultado raster usam o mesmo modo.
         local mode=paint.pngPreview.interpolation or 'pixelated'
         local filterY=oy-45
+        -- Ajuste fino de giro com valor legível e reposição ao zero.
+        -- A linha fica acima dos botões existentes sem impedir o canvas.
+        local precisionY=filterY-44
+        rectangle(ox-7,precisionY-5,(bw+gap)*6+9,39,C.deep,0.96,6)
+        local degrees=math.deg(paint.pngPreview.angle)
+        degrees=(degrees+180)%360-180
+        local zoom=paint.pngPreview.scaleX*100
+        label(string.format('Giro %+.1f°  Zoom %.0f%%',degrees,zoom),
+            ox+2,precisionY+8,262,'tiny','left',C.white)
+        for i,item in ipairs({
+            {'-1°',function() paint:adjustPNGImport(0,0,1,-math.pi/180) end},
+            {'+1°',function() paint:adjustPNGImport(0,0,1, math.pi/180) end},
+            {'Giro 0°',function() paint:resetPNGImportAngle() end},
+        }) do
+            local bx=ox+264+(i-1)*88
+            rectangle(bx,precisionY,84,29,C.panel_head,0.98,4)
+            label(item[1],bx,precisionY+7,84,'small','center',C.white)
+            hit(bx,precisionY,84,29,function()
+                item[2]();notice(paint.status)
+            end,'png_precision_'..i)
+        end
         rectangle(ox-7,filterY-5,382,39,C.deep,0.96,6)
         label('PNG:',ox+3,filterY+8,51,'tiny','left',C.white)
         for i,item in ipairs({{'Suave','smooth'},{'Pixelado','pixelated'}}) do
@@ -3687,6 +3708,18 @@ function love.update()
             click_control('png_mode_smooth')
             assert(paint.pngPreview.interpolation=='smooth',
                 'UI: clique Suave não atualizou a sessão')
+            click_control('png_precision_2')
+            assert(math.abs(paint.pngPreview.angle-math.pi/180)<1e-9,
+                'UI v0.32: +1° não altera a rotação')
+            click_control('png_precision_1')
+            assert(math.abs(paint.pngPreview.angle)<1e-9,
+                'UI v0.32: -1° não altera a rotação')
+            click_control('png_action_2')
+            assert(math.abs(paint.pngPreview.angle-math.pi/12)<1e-9,
+                'UI v0.32: botão +15° não altera a rotação')
+            click_control('png_precision_3')
+            assert(paint.pngPreview.angle==0,
+                'UI v0.32: zerar giro não restaurou a posição')
             click_control('png_action_6')
             assert(not paint.pngPreview and #paint.doc.layers==2,
                 'UI: aplicar PNG não criou uma camada')

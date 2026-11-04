@@ -902,6 +902,17 @@ function Bridge:adjustPNGImport(dx,dy,scale,angle)
   return true
 end
 
+-- Permite zerar o giro com precisão, sem deslocar ou redimensionar a prévia.
+function Bridge:resetPNGImportAngle()
+  local session=self.pngPreview
+  if not session then return false end
+  local ok,err=pcall(Transform.set,session,
+    session.dx,session.dy,session.scaleX,session.scaleY,0)
+  if not ok then self.status='Giro PNG: '..tostring(err);return false end
+  self.status='Rotação PNG zerada'
+  return true
+end
+
 function Bridge:setPNGInterpolation(mode)
   if not self.pngPreview then return false end
   local ok,reason=pcall(PNGImport.setInterpolation,self.pngPreview,mode)

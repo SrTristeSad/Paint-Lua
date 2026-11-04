@@ -1,4 +1,4 @@
-# Paint-Lua — Projeto único (v0.31)
+# Paint-Lua — Projeto único (v0.32)
 
 Editor experimental de pintura digital em Lua / LÖVE 11.5. A interface de Ibis-Lua e o núcleo de pintura v0.21 são **código-fonte do mesmo repositório**. Não há submódulos, download do Ibis-Lua na inicialização ou integração atual com DragonBones/Bono-Lua.
 
@@ -9,6 +9,12 @@ Editor experimental de pintura digital em Lua / LÖVE 11.5. A interface de Ibis-
 3. Execute **testar.bat** na pasta raiz. Não precisa de Git, Python, PowerShell ou conexão à internet para iniciar.
 
 Clone alternativo: git clone https://github.com/SrTristeSad/Paint-Lua.git (sem --recurse-submodules).
+
+## Novidade v0.32 — antialias de rotação e giro fino
+
+Ao rotacionar um PNG no modo **Suave**, as bordas inclinadas agora usam cobertura subpixel (2×2 nas áreas internas, 4×4 junto às bordas), com RGB pré-multiplicado por alfa. Isso reduz serrilhados e evita franjas de cores invisíveis. O modo **Pixelado** preserva os pixels duros. Importações sem giro continuam com a amostragem v0.31, evitando alterações inesperadas nos resultados anteriores.
+
+Na prévia PNG, use **−1° / +1° / Giro 0°** para ajustes finos, além dos botões de 15°, zoom, **Aplicar** e **Cancelar**. A interface mostra o ângulo e a escala atuais. A nova suavização pode consumir mais CPU em importações grandes. A aplicação mantém uma única operação de histórico e salva em NPNT5, sem modificar o PNG original. [Guia e limitações v0.32](docs/ROTACAO_PNG_v032.md).
 
 ## Novidade v0.31 — qualidade da importação PNG (Suave / Pixelado)
 

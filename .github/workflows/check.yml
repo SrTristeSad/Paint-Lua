@@ -1,7 +1,7 @@
-name: Paint-Lua v0.31 — interpolação suave ou pixelada de PNG
+name: Paint-Lua v0.32 — antialias de bordas PNG e ajuste fino
 on:
   push:
-    branches: [main, feature/paint-v031-png-interpolation]
+    branches: [main, feature/paint-v032-rotated-png-aa]
   pull_request:
 jobs:
   checks:
@@ -26,6 +26,8 @@ jobs:
           test -f tests/test_png_import_v029.lua
           test -f tests/test_png_placement_v030.lua
           test -f tests/test_png_interpolation_v031.lua
+          test -f tests/test_png_rotation_aa_v032.lua
+          test -f docs/ROTACAO_PNG_v032.md
           test -f docs/INTERPOLACAO_PNG_v031.md
           test -f tests/test_core.lua
           test -f assets/icons/png/paintbrush.png
@@ -35,7 +37,7 @@ jobs:
         run: |
           lua5.4 tests/test_core.lua > core-results.log
           tail -n 5 core-results.log
-          grep -Eq '1086 passou, 0 falhou' core-results.log
+          grep -Eq '1103 passou, 0 falhou' core-results.log
       - name: Testes do modelo e navegação
         run: |
           lua5.4 scripts/smoke-core.lua
@@ -53,7 +55,7 @@ jobs:
         run: timeout 60s xvfb-run -a env PAINT_LUA_BRIDGE_E2E=1 love .
       - name: E2E de navegação e botões reais no LÖVE
         run: timeout 75s xvfb-run -a env PAINT_LUA_E2E=1 love .
-      - name: E2E de botões Suave/Pixelado e resultado raster
+      - name: E2E dos modos PNG e controles finos de rotação
         run: timeout 60s xvfb-run -a env PAINT_LUA_PNG_FILTER_E2E=1 love .
       - name: E2E de arraste, setas e rolagem do painel Layer
         run: timeout 60s xvfb-run -a env PAINT_LUA_LAYER_E2E=1 love .
@@ -63,25 +65,26 @@ jobs:
         run: |
           timeout 70s xvfb-run -a env PAINT_LUA_GALLERY_PERSIST_E2E=create love .
           timeout 70s xvfb-run -a env PAINT_LUA_GALLERY_PERSIST_E2E=check love .
-      - name: Empacotar v0.31 com fontes e .bat para Windows
+      - name: Empacotar v0.32 com fontes e .bat para Windows
         shell: bash
         run: |
-          git archive --format=zip --output=Paint-Lua-v0.31-Windows.zip HEAD
-          unzip -tq Paint-Lua-v0.31-Windows.zip
-          unzip -Z1 Paint-Lua-v0.31-Windows.zip | grep -q '^core/selection.lua$'
-          unzip -Z1 Paint-Lua-v0.31-Windows.zip | grep -q '^core/transform.lua$'
-          unzip -Z1 Paint-Lua-v0.31-Windows.zip | grep -q '^core/thumbnail.lua$'
-          unzip -Z1 Paint-Lua-v0.31-Windows.zip | grep -q '^src/gallery_storage.lua$'
-          unzip -Z1 Paint-Lua-v0.31-Windows.zip | grep -q '^tests/test_gallery_storage.lua$'
-          unzip -Z1 Paint-Lua-v0.31-Windows.zip | grep -q '^tests/test_core.lua$'
-          unzip -Z1 Paint-Lua-v0.31-Windows.zip | grep -q '^src/png_import.lua$'
-          unzip -Z1 Paint-Lua-v0.31-Windows.zip | grep -q '^tests/test_png_import_v029.lua$'
-          unzip -Z1 Paint-Lua-v0.31-Windows.zip | grep -q '^tests/test_png_interpolation_v031.lua$'
-          unzip -Z1 Paint-Lua-v0.31-Windows.zip | grep -q '^testar.bat$'
-          sha256sum Paint-Lua-v0.31-Windows.zip
+          git archive --format=zip --output=Paint-Lua-v0.32-Windows.zip HEAD
+          unzip -tq Paint-Lua-v0.32-Windows.zip
+          unzip -Z1 Paint-Lua-v0.32-Windows.zip | grep -q '^core/selection.lua$'
+          unzip -Z1 Paint-Lua-v0.32-Windows.zip | grep -q '^core/transform.lua$'
+          unzip -Z1 Paint-Lua-v0.32-Windows.zip | grep -q '^core/thumbnail.lua$'
+          unzip -Z1 Paint-Lua-v0.32-Windows.zip | grep -q '^src/gallery_storage.lua$'
+          unzip -Z1 Paint-Lua-v0.32-Windows.zip | grep -q '^tests/test_gallery_storage.lua$'
+          unzip -Z1 Paint-Lua-v0.32-Windows.zip | grep -q '^tests/test_core.lua$'
+          unzip -Z1 Paint-Lua-v0.32-Windows.zip | grep -q '^src/png_import.lua$'
+          unzip -Z1 Paint-Lua-v0.32-Windows.zip | grep -q '^tests/test_png_import_v029.lua$'
+          unzip -Z1 Paint-Lua-v0.32-Windows.zip | grep -q '^tests/test_png_interpolation_v031.lua$'
+          unzip -Z1 Paint-Lua-v0.32-Windows.zip | grep -q '^tests/test_png_rotation_aa_v032.lua$'
+          unzip -Z1 Paint-Lua-v0.32-Windows.zip | grep -q '^testar.bat$'
+          sha256sum Paint-Lua-v0.32-Windows.zip
       - name: Disponibilizar ZIP
         uses: actions/upload-artifact@v4
         with:
-          name: Paint-Lua-v0.31-Windows
-          path: Paint-Lua-v0.31-Windows.zip
+          name: Paint-Lua-v0.32-Windows
+          path: Paint-Lua-v0.32-Windows.zip
           if-no-files-found: error

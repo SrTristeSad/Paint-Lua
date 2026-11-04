@@ -424,3 +424,26 @@ assert(math.abs(rr-0.75)<0.008 and math.abs(bb-0.25)<0.008 and
   math.abs(aa-1)<0.008,'NPNT5 não preservou pixel suave')
 love.filesystem.remove(smoothBridge.filename)
 print('PASS: LÖVE v0.31: PNG bilinear RGBA, filtro GPU, histórico e NPNT5')
+
+-- v0.32: máscara de cobertura da importação rotacionada no ImageData real.
+local AAImport=require('src.png_import')
+local aaDoc=Doc.new(24,24,'rotação com antialias')
+local aaSource=love.image.newImageData(3,3)
+for y=0,2 do for x=0,2 do aaSource:setPixel(x,y,1,0.1,0.05,1) end end
+local aaSession=AAImport.preview(aaDoc,aaSource,'aa.png')
+AAImport.setInterpolation(aaSession,'smooth')
+AAImport.adjust(aaSession,0,0,1,math.pi/4)
+local aaLayer=assert(AAImport.insert(aaDoc,aaSource,'aa.png',aaSession))
+local aaTile=assert(aaLayer.tiles['0,0'])
+local partial,opaque=false,false
+for y=0,23 do for x=0,23 do
+  local r,g,b,a=aaTile:getPixel(x,y)
+  if a>0 and a<0.99 then partial=true end
+  if a>0.99 then opaque=true end
+  if a>0 then assert(r>g and g>b,'cor corrompida após antialias da rotação') end
+end end
+assert(partial and opaque,'giro suave não produziu pixels com cobertura parcial')
+assert(#aaDoc.history.undo==1,'rotação PNG inseriu ações extras no histórico')
+require('core.history').undo(aaDoc)
+assert(#aaDoc.layers==2,'undo da importação rotacionada não removeu camada')
+print('PASS: LÖVE real v0.32: bordas inclinadas AA, transparência e histórico')

@@ -38,3 +38,7 @@ A galeria agora usa miniaturas PNG derivadas dos arquivos `.npnt` e exporta comp
 - v0.31: não confundir o filtro de visualização de canvas com a interpolação
   da **importação PNG**. Suave usa bilinear com alfa pré-multiplicado; Pixelado
   usa nearest; chamadas legadas `PNGImport.insert` continuam nearest.
+
+## Atualização v0.32 — importação PNG
+
+A rasterização suave de PNGs com rotação oblíqua aplica antialias por subamostragem com acumulação de RGB premultiplicada por alfa (`src/png_import.lua`). A importação pixelada e a transformação de seleções permanecem inalteradas. A UI expõe −1°, +1° e reset de giro; validar via `tests/test_png_rotation_aa_v032.lua`, E2E no LÖVE e documentação `docs/ROTACAO_PNG_v032.md`.
