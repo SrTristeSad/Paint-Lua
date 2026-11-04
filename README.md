@@ -1,5 +1,8 @@
 # Paint-Lua
 
+> **Quer continuar este projeto em outro chat?** Leia o [PROMPT DO PROJETO](PROMPT_DO_PROJETO.md), com objetivo, histórico técnico, estado da v0.21 e próximos passos. Assistentes de programação também devem ler [AGENTS.md](AGENTS.md). Este é o ponto de partida oficial para retomar o desenvolvimento.
+
+
 Editor de pintura experimental em **Lua / LÖVE 11.5**, organizado em um núcleo de pintura independente (v0.21) e uma primeira casca gráfica. Este repositório é o ponto de desenvolvimento do projeto.
 
 ## Como executar
