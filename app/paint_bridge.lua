@@ -35,7 +35,8 @@ end
 
 function Bridge.new()
   return setmetatable({doc=nil,modelDocument=nil,byId={},uiByLayer={},
-    stroke=nil,job=nil,jobKind=nil,selectionDrag=nil,transform=nil,transformDrag=nil,
+    stroke=nil,job=nil,jobKind=nil,selectionDrag=nil,selectionMode='replace',jobSelectionMode=nil,
+    transform=nil,transformDrag=nil,
     pngPreview=nil,pngDrag=nil,
     cache=nil,gpu={},thumbCache=setmetatable({}, {__mode='k'}),
     thumbRenders=0,maskMode=nil,maskOwner=nil,
@@ -61,7 +62,7 @@ function Bridge:cancelJob()
   if self.job then
     local kind=self.jobKind
     Job.cancel(self.job)
-    self.job=nil;self.jobKind=nil
+    self.job=nil;self.jobKind=nil;self.jobSelectionMode=nil
     self.status=kind=='wand' and 'Seleção por cor cancelada' or 'Preenchimento cancelado'
   end
 end
@@ -76,6 +77,7 @@ function Bridge:sync(model)
     self:cancelJob()
     self:dropImages()
     self.selectionDrag=nil
+    self.selectionMode='replace'
     self:cancelTransform()
     self:cancelPNGImport()
     self.maskMode,self.maskOwner=nil,nil
@@ -512,6 +514,44 @@ function Bridge:applySelection(selection)
   return true
 end
 
+
+-- O modo escolhido vale para o próximo gesto e não altera o documento.
+function Bridge:setSelectionMode(mode)
+  if mode~='replace' and mode~='add' and mode~='subtract'
+    and mode~='intersect' then
+    self.status='Modo de seleção desconhecido'
+    return false
+  end
+  self.selectionMode=mode
+  local names={replace='Nova',add='Adicionar',subtract='Subtrair',
+    intersect='Interseção'}
+  self.status='Próxima seleção: '..names[mode]
+  return true
+end
+
+-- Combina o novo gesto com a seleção anterior. Um snapshot de histórico
+-- só é registrado depois que o cálculo terminou sem erros.
+function Bridge:combineSelection(selection,mode)
+  if not self.doc or self.stroke or self.job or self.transform or self.selectionDrag
+    or self.pngPreview or self.doc.history.stroke then
+    self.status='Conclua a operação atual antes de selecionar'
+    return false
+  end
+  local chosen=mode or self.selectionMode or 'replace'
+  if chosen=='replace' then return self:applySelection(selection) end
+  local ok,result,err=pcall(Selection.combine,self.doc,self.doc.selection,
+    selection,chosen)
+  if not ok then self.status='Combinação: '..tostring(result);return false end
+  if err then self.status=err;return false end
+  local changed=self:applySelection(result)
+  if changed then
+    local label={add='Área adicionada',subtract='Área subtraída',
+      intersect='Interseção aplicada'}
+    self.status=label[chosen]
+  end
+  return changed
+end
+
 function Bridge:selectAll(model)
   local doc=self:sync(model)
   if not doc then return false end
@@ -541,7 +581,8 @@ function Bridge:clearSelection()
 end
 
 function Bridge:beginSelection(model,view,prefs,uiScale,W,H,rx,ry)
-  if self.stroke or self.job or self.transform then return false end
+  if self.stroke or self.job or self.transform or self.selectionDrag
+    or self.pngPreview then return false end
   local tool=model.active_tool
   if tool~='selection_rect' and tool~='lasso' and tool~='magic_wand' then
     return false
@@ -551,11 +592,12 @@ function Bridge:beginSelection(model,view,prefs,uiScale,W,H,rx,ry)
   if tool=='magic_wand' then
     local job=Selection.newWandJob(self.doc,self.doc.layers[self.doc.sel],px,py,0.08,
       {yieldEvery=512,maxPixels=2000000})
-    self.job=job;self.jobKind='wand'
+    self.job=job;self.jobKind='wand';self.jobSelectionMode=self.selectionMode
     self.status='Selecionando área por cor...'
     return true
   end
-  self.selectionDrag={kind=tool,startX=px,startY=py,x=px,y=py,
+  self.selectionDrag={kind=tool,mode=self.selectionMode,
+    startX=px,startY=py,x=px,y=py,
     points=tool=='lasso' and {{px,py}} or nil}
   return true
 end
@@ -589,7 +631,7 @@ function Bridge:finishSelection(model,view,prefs,uiScale,W,H,rx,ry)
     selection=value
   end
   if not selection then self.status='Seleção vazia';return false end
-  return self:applySelection(selection)
+  return self:combineSelection(selection,drag.mode)
 end
 
 -- A prévia retém o ImageData da camada ativa; o documento só muda ao aplicar.
@@ -868,15 +910,17 @@ function Bridge:update()
   if not self.job then return end
   local job=self.job
   local kind=self.jobKind
+  local selectionMode=self.jobSelectionMode
   local ok,done,value=pcall(Job.step,job,0.004,love.timer and love.timer.getTime or os.clock)
   if not ok then
-    self.job=nil;self.jobKind=nil
+    self.job=nil;self.jobKind=nil;self.jobSelectionMode=nil
     self.status=(kind=='wand' and 'Varinha: ' or 'Balde: ')..tostring(done)
     return self.status
   elseif done then
-    self.job=nil;self.jobKind=nil
+    self.job=nil;self.jobKind=nil;self.jobSelectionMode=nil
     if kind=='wand' then
-      if value then self:applySelection(value) else self.status='Seleção vazia' end
+      if value then self:combineSelection(value,selectionMode)
+      else self.status='Seleção vazia' end
     else
       self.status='Preenchimento: '..tostring(value or 0)..' pixels'
     end

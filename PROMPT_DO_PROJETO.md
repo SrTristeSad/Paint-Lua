@@ -86,3 +86,14 @@ desfazer/refazer estrutural, nenhum pixel modificado. Controlado no
 Selection Area e em Ctrl+Shift+I (não modificar Ctrl+I, importação PNG).
 Bloqueia imagens muito grandes ao rasterizar a seleção original.
 Seleções combinadas e feather ainda não estão implementados.
+
+### Estado v0.36 — combinação de seleções
+
+A v0.36 permite escolher Nova, Somar, Subtrair ou Interseção para a
+próxima seleção criada por retângulo, laço ou varinha. As máscaras
+booleanas mantêm compatibilidade NPNT5 e inversões da v0.35.
+Uma interseção vazia NÃO vira `nil` (pintura sem restrições), mas
+uma seleção vazia com máscara raster explícita. O limite de 2 milhões
+de pixels / 256 tiles protege do custo de combinação. Cada gesto entra
+no histórico como uma operação, sem mexer nos pixels. Regressão da
+UI e dos atalhos de importação PNG continua prioridade.

@@ -576,3 +576,44 @@ assert(invBridge.doc.selection.mask.inverted
   'LÖVE: seleção não persistiu')
 love.filesystem.remove(invBridge.filename)
 print('PASS: LÖVE real v0.35: inversão, pixels, undo/redo e NPNT5')
+
+-- v0.36: seleção booleana, pixels reais, undo/redo e NPNT5.
+local combineModel=Model.new()
+combineModel:open_gallery();combineModel:open_new_canvas();combineModel:create_canvas(64,64)
+local combineBridge=Bridge.new()
+local combineDoc=assert(combineBridge:sync(combineModel))
+local original=Selection.rect(combineDoc,10,10,17,17)
+combineDoc.selection=original
+local combinedTile,combinedKey=Doc.getTile(combineDoc.layers[1],0,0,true)
+combinedTile:setPixel(12,12,1,0,0,1)
+Doc.markDirty(combineDoc.layers[1],combinedKey)
+assert(combineBridge:combineSelection(Selection.rect(combineDoc,20,20,27,27),'add'))
+assert(Selection.contains(combineDoc.selection,12,12)
+  and Selection.contains(combineDoc.selection,24,24)
+  and not Selection.contains(combineDoc.selection,1,1),
+  'LÖVE v0.36: união de regiões incorreta')
+assert(combineBridge:combineSelection(Selection.rect(combineDoc,11,11,14,14),'subtract'))
+assert(not Selection.contains(combineDoc.selection,12,12)
+  and Selection.contains(combineDoc.selection,24,24),
+  'LÖVE v0.36: subtração incorreta')
+assert(combineBridge:combineSelection(Selection.rect(combineDoc,21,21,25,25),'intersect'))
+assert(Selection.contains(combineDoc.selection,22,22)
+  and not Selection.contains(combineDoc.selection,16,16),
+  'LÖVE v0.36: interseção incorreta')
+assert(#combineDoc.history.undo==3,'LÖVE v0.36: histórico não tem três gestos')
+assert(select(4,combinedTile:getPixel(12,12))==1,
+  'LÖVE v0.36: combinação modificou RGBA')
+assert(combineBridge:historyStep(combineModel,false)
+  and Selection.contains(combineDoc.selection,16,16),
+  'LÖVE v0.36: undo da combinação falhou')
+assert(combineBridge:historyStep(combineModel,true)
+  and not Selection.contains(combineDoc.selection,16,16),
+  'LÖVE v0.36: redo da combinação falhou')
+combineBridge.filename='ci-paint-lua-v036.npnt'
+assert(combineBridge:save(),'LÖVE v0.36: não salvou combinação')
+assert(combineBridge:load(combineModel),'LÖVE v0.36: não reabriu NPNT5')
+assert(Selection.contains(combineBridge.doc.selection,22,22)
+  and not Selection.contains(combineBridge.doc.selection,16,16),
+  'LÖVE v0.36: região combinada não persistiu')
+love.filesystem.remove(combineBridge.filename)
+print('PASS: LÖVE real v0.36: união, subtração, interseção, undo/redo e NPNT5')

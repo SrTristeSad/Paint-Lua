@@ -285,6 +285,121 @@ function S.invert(doc,sel)
   return {kind='wand',x=0,y=0,w=doc.w,h=doc.h,mask=mask}
 end
 
+
+-- Operações booleanas sobre seleções. Um resultado vazio é uma máscara vazia,
+-- NÃO nil: nil no Paint-Lua significa pintar sem restrição.
+-- Seleções invertidas usam o bit inverted do NPNT5 e tiles de exceção.
+local MODES={replace=true,add=true,subtract=true,intersect=true}
+local MAX_COMBINE_PIXELS=2000000
+local MAX_COMBINE_TILES=256
+local function combineBool(a,b,mode)
+  if mode=='add' then return a or b end
+  if mode=='subtract' then return a and not b end
+  return a and b -- intersect
+end
+local function isFullInverse(doc,sel)
+  return sel.kind=='wand' and sel.mask.inverted and
+    sel.x==0 and sel.y==0 and sel.w==doc.w and sel.h==doc.h
+end
+
+function S.combine(doc,previous,incoming,mode)
+  assert(doc and int(doc.w,1,65536) and int(doc.h,1,65536),'documento inválido')
+  assert(MODES[mode],'modo de combinação inválido')
+  if previous then S.validate(doc,previous) end
+  if incoming then S.validate(doc,incoming) end
+  if mode=='replace' then return incoming end
+  if not incoming then return nil,'Nova região vazia' end
+  if not previous then
+    if mode=='add' then return incoming end
+    return nil,'Selecione uma área antes de subtrair ou intersectar'
+  end
+
+  -- Fora dos tiles candidatos, a seleção positiva é falsa; uma
+  -- máscara invertida de tela inteira tem valor padrão verdadeiro.
+  local aDefault=isFullInverse(doc,previous)
+  local bDefault=isFullInverse(doc,incoming)
+  for _,sel in ipairs({previous,incoming}) do
+    if sel.kind=='wand' and sel.mask.inverted and
+      not isFullInverse(doc,sel) then
+      return nil,'Máscara inversa parcial não é combinável'
+    end
+  end
+  local resultDefault=combineBool(aDefault,bDefault,mode)
+  local keys={}
+  local totalTiles=0
+  local totalPixels=0
+  local function addTile(tx,ty)
+    local key=tx..','..ty
+    if keys[key] then return true end
+    local w=min(T,doc.w-tx*T)
+    local h=min(T,doc.h-ty*T)
+    if w<=0 or h<=0 then return end
+    totalTiles=totalTiles+1
+    totalPixels=totalPixels+w*h
+    if totalTiles>MAX_COMBINE_TILES or totalPixels>MAX_COMBINE_PIXELS then
+      return nil,'Combinação excede 2 milhões de pixels / 256 tiles'
+    end
+    keys[key]={tx=tx,ty=ty,w=w,h=h}
+    return true
+  end
+  local function collect(sel)
+    if sel.kind=='wand' then
+      for key in pairs(sel.mask.tiles) do
+        local tx,ty=Doc.parseKey(key)
+        local ok,err=addTile(tx,ty)
+        if not ok then return nil,err end
+      end
+    else
+      local tx0,ty0=floor(sel.x/T),floor(sel.y/T)
+      local tx1,ty1=floor((sel.x+sel.w-1)/T),floor((sel.y+sel.h-1)/T)
+      for ty=ty0,ty1 do
+        for tx=tx0,tx1 do
+          local ok,err=addTile(tx,ty)
+          if not ok then return nil,err end
+        end
+      end
+    end
+    return true
+  end
+  local ok,err=collect(previous)
+  if not ok then return nil,err end
+  ok,err=collect(incoming)
+  if not ok then return nil,err end
+
+  local mask=Mask.new(0)
+  mask.inverted=resultDefault
+  local x0,y0,x1,y1=doc.w,doc.h,-1,-1
+  local sorted={}
+  for _,info in pairs(keys) do sorted[#sorted+1]=info end
+  table.sort(sorted,function(a,b)
+    return a.ty==b.ty and a.tx<b.tx or a.ty<b.ty
+  end)
+  for _,info in ipairs(sorted) do
+    local tile=nil
+    for yy=0,info.h-1 do
+      local y=info.ty*T+yy
+      for xx=0,info.w-1 do
+        local x=info.tx*T+xx
+        local present=combineBool(S.contains(previous,x,y),
+          S.contains(incoming,x,y),mode)
+        if present~=resultDefault then
+          if not tile then tile=Mask.getTile(mask,info.tx,info.ty,true) end
+          tile:setPixel(xx,yy,1,1,1,1)
+          if not resultDefault then
+            x0=min(x0,x);y0=min(y0,y)
+            x1=max(x1,x);y1=max(y1,y)
+          end
+        end
+      end
+    end
+  end
+  if resultDefault or x1<0 then
+    -- Máscara vazia continua selecionando ZERO pixels; nil não serviria.
+    return {kind='wand',x=0,y=0,w=doc.w,h=doc.h,mask=mask}
+  end
+  return {kind='wand',x=x0,y=y0,w=x1-x0+1,h=y1-y0+1,mask=mask}
+end
+
 function S.wand(doc,layer,x,y,tolerance,opts)
   opts=opts or {}
   return flood(doc,layer,x,y,tolerance,nil,opts.maxPixels)
