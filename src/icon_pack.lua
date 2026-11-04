@@ -35,7 +35,7 @@ function IconPack.load()
     local unique={}
     for _,asset in pairs(assets) do unique[asset]=true end
     for asset in pairs(unique) do
-        local path="vendor/Ibis-Lua/assets/icons/png/"..asset..".png"
+        local path="assets/icons/png/"..asset..".png"
         local ok,img=pcall(love.graphics.newImage,path)
         assert(ok and img and img.setFilter and img.getWidth,
             "Pacote Lucide ausente ou inválido: "..path)

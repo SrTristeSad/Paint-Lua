@@ -1,5 +1,5 @@
 -- Smoke test puro: nao exige janela nem imagens do LOVE.
-package.path=package.path..";vendor/Ibis-Lua/?.lua;vendor/Ibis-Lua/?/init.lua"
+package.path=package.path..""
 local Model=require("src.model")
 local Bridge=require("app.paint_bridge")
 local model=Model.new()

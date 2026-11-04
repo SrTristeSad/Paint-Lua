@@ -1,32 +1,15 @@
-# Continuidade do Paint-Lua
+# Continuidade — Paint-Lua unificado
 
-> Decisão mais recente do criador (03/11/2026): **substituir a antiga casca por Ibis-Lua**. DragonBones/Bono-Lua **não participa** da versão atual.
+**Decisão do criador:** este é **um projeto único** que incorpora diretamente a interface do Ibis-Lua e o motor do Paint-Lua. Não utilizar submódulos ou baixadores do outro repositório. Bono-Lua/DragonBones é uma possível ideia futura, NÃO é usado agora.
 
-## Prompt para um próximo chat
+## Prompt para o próximo chat
 
-Continue meu editor **Paint-Lua**, repositório oficial https://github.com/SrTristeSad/Paint-Lua. Leia este arquivo, `README.md`, `AGENTS.md` e `ORIGENS.md` e examine o código antes de mudar a arquitetura. O criador toma as decisões finais; você participa criticamente, preserva os recursos funcionais, testa o que modifica e informa limitações.
+Continue o desenvolvimento do repositório https://github.com/SrTristeSad/Paint-Lua. Leia este documento, README.md, AGENTS.md e ORIGENS.md, examine o código atual e os testes antes de modificar. Sou o criador e tomo as decisões finais. Colabore criticamente, preserve decisões e não reescreva funcionalidades existentes desnecessariamente.
 
-O objetivo é construir um editor de pintura em **Lua/LÖVE 11.5**, com um **núcleo de pintura próprio** (v0.21) e a **casca visual Ibis-Lua**, disponibilizada em https://github.com/SrTristeSad/Ibis-Lua. A UI original é um submódulo em `vendor/Ibis-Lua`. A ponte em `app/paint_bridge.lua` integra os recursos básicos. Preserve a independência entre núcleo e interface.
+Motor próprio v0.21: 20 módulos em core/, com pincéis, pressão, estabilização, texturas, composição por tiles, cache, histórico, preenchimento, camadas, máscaras, clipping, grupos e persistência NPNT1–NPNT4. Interface Ibis-Lua incorporada em src/, assets/ e app/ibis_main.lua. Ponte em app/paint_bridge.lua. **Nem toda opção da interface tem lógica de pintura conectada.** Manter a divisão entre motor e UI.
 
-PhotoCraft (Rust) é **referência técnica** para conceitos reimplementados em Lua. ibisPaint é **referência funcional**, não uma fonte de código ou de assets proprietários. Mantenha créditos/licenças.
+Objetivo: editor de pintura em Lua para LÖVE 11.5, com PhotoCraft como referência técnica e ibisPaint como referência funcional, sem código nem arquivos proprietários. A interface original Ibis-Lua é do mesmo criador, mas sua cópia neste projeto é independente e editável.
 
-## Estado técnico
+Verificação: 777 testes históricos no motor com simulações; CI de LÖVE 11.5 no Linux com display virtual testou pincel, undo, redo, salvar/abrir NPNT. Faltam teste no Windows, tablet e medidas de desempenho. Priorizar a integração correta de propriedades das camadas, ferramentas, máscaras e grupos; corrigir erros reais, testar antes de publicar, e nunca inventar validação.
 
-- Motor v0.21: pincéis com pressão, estabilização, texturas, simetria, mistura de tinta simplificada; camadas, máscaras, mesclagens, grupos aninhados, histórico, preenchimento e composição por tiles e cache; formato `.npnt` (NPNT1–NPNT4).
-- **777 testes históricos em texlua com mocks**. A integração nova também passou em CI com **LÖVE 11.5 real no Linux headless** (UI, pincel, undo/redo e NPNT). Windows, latência, FPS e dispositivos móveis não foram validados.
-- Interface Ibis-Lua: galeria, novo canvas, ferramentas e painéis, com muitas operações **ainda simuladas**.
-- Integração inicial: canvas real, mouse/borracha, cores/tamanho/opacidade, camadas básicas e atalhos para histórico e salvar/abrir. Não afirmar que todas as ferramentas do Ibis-Lua estão integradas ao motor.
-- Próxima prioridade: executar no LÖVE 11.5 real, corrigir a integração, adicionar testes de ponta a ponta e conectar opções do painel ao motor de forma incremental.
-
-## Como preparar
-
-```sh
-git clone --recurse-submodules https://github.com/SrTristeSad/Paint-Lua.git
-cd Paint-Lua
-sh scripts/prepare-core.sh # Windows: executar testar.bat, que prepara automaticamente
-love .
-```
-
-O núcleo é armazenado em 12 partes compactadas por limitações anteriores da publicação; os arquivos editáveis são criados em `core/`. Em futuras melhorias, considerar versionar os fontes diretamente, sem perder testes e atribuições.
-
-**Backup da antiga main:** branch `backup/pre-ibis-rebuild-2026-11-03`. Não restaurar a casca antiga nem o submódulo Bono-Lua sem uma decisão explícita do criador.
+O backup da arquitetura antiga está na branch backup/pre-ibis-rebuild-2026-11-03, e a fase com submódulo permanece no histórico Git. Não restaurar essas arquiteturas sem autorização do criador.

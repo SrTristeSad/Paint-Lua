@@ -1,6 +1,10 @@
-*.love
-*.log
-*.npnt
 .DS_Store
 .vscode/
+*.love
+*.zip
+*.log
+*.npnt
 __pycache__/
+.pytest_cache/
+screenshots/
+ci-smoke.png
