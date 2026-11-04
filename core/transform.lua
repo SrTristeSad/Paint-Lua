@@ -22,9 +22,16 @@ local function srcPixel(layer,x,y)
   return 0,0,0,0
 end
 local function ensureImage(s)
-  if not s.previewImage and love.graphics and love.graphics.newImage then
+  if not love.graphics or not love.graphics.newImage then return nil end
+  if not s.previewImage then
     s.previewImage=love.graphics.newImage(s.source)
-    s.previewImage:setFilter('nearest','nearest')
+  end
+  -- Sem interpolação explícita (transformações de seleção), mantém nearest.
+  -- Sessões de PNG podem alternar entre nearest e linear sem recriar a GPU.
+  local filter=s.interpolation=='smooth' and 'linear' or 'nearest'
+  if s.previewFilter~=filter then
+    s.previewImage:setFilter(filter,filter)
+    s.previewFilter=filter
   end
   return s.previewImage
 end
@@ -96,6 +103,7 @@ function T.cancel(s)
   s.active=false
   if s.previewImage and s.previewImage.release then s.previewImage:release() end
   s.previewImage=nil
+  s.previewFilter=nil
   return true
 end
 

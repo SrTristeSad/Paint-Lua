@@ -1,4 +1,4 @@
-# Paint-Lua — Projeto único (v0.30)
+# Paint-Lua — Projeto único (v0.31)
 
 Editor experimental de pintura digital em Lua / LÖVE 11.5. A interface de Ibis-Lua e o núcleo de pintura v0.21 são **código-fonte do mesmo repositório**. Não há submódulos, download do Ibis-Lua na inicialização ou integração atual com DragonBones/Bono-Lua.
 
@@ -10,13 +10,37 @@ Editor experimental de pintura digital em Lua / LÖVE 11.5. A interface de Ibis-
 
 Clone alternativo: git clone https://github.com/SrTristeSad/Paint-Lua.git (sem --recurse-submodules).
 
+## Novidade v0.31 — qualidade da importação PNG (Suave / Pixelado)
+
+A prévia de importação ganhou **dois modos de qualidade**, exibidos acima dos botões de
+mover/rotacionar/aplicar:
+
+- **Suave (padrão na interface):** interpolação bilinear CPU com cores pré-multiplicadas
+  por alfa. Redimensiona e gira fotografias com transições mais suaves; pixels totalmente
+  transparentes não contaminam a cor das bordas (evita halos). A prévia usa filtro
+  linear na GPU, e o **resultado final é rasterizado pelo núcleo**, não capturado da tela.
+- **Pixelado:** usa a amostragem nearest-neighbor da v0.30; mantém as bordas duras
+  de pixel art. Pode alternar os modos quantas vezes quiser antes de **Aplicar**.
+
+A escolha é por **importação**, não altera o filtro do canvas nem a forma de pintar.
+A chamada legada `PNGImport.insert(doc, image, nome)` continua usando nearest-neighbor
+para não quebrar scripts antigos; a prévia aberta pela UI inicia em Suave.
+Aplicar continua criando **uma camada e uma única entrada no histórico**; Cancelar não
+altera a obra. Arquivos NPNT5 antigos continuam legíveis.
+
+**Limites:** a interpolação é bilinear, não bicúbica; ainda há contorno raster em
+silhuetas rotacionadas, e imagens grandes podem exigir processamento na CPU. Mantêm-se
+os limites de 16 MiB/2.097.152 pixels e escala 0,125×–8×. Windows e mesa
+digitalizadora ainda precisam de teste manual.
+[Guia técnico v0.31](docs/INTERPOLACAO_PNG_v031.md).
+
 ## Novidade v0.30 — prévia ajustável da importação PNG
 
 Ao arrastar um PNG sobre uma obra aberta, ou escolher uma imagem em **Back → Importar PNG** (também em `Ctrl+I`), o editor agora abre uma **prévia flutuante**. O arquivo não é inserido imediatamente: você pode **arrastar para posicionar, girar em passos de 15° e aumentar/reduzir em passos de 10%**. Só o botão **Aplicar** ou **Enter** insere uma nova camada. **Esc** ou **Cancelar** descarta a prévia sem modificar pixels, camadas, histórico nem NPNT. As setas movem um pixel por tecla; **Q/R** giram; **+/-** ajustam escala.
 
-A operação usa a mesma geometria de `core/transform.lua` e o mesmo importador de tiles da v0.29: é rasterizada com *nearest-neighbor*, recortada no canvas e registrada como **uma única ação desfazer/refazer**. O PNG original não é alterado. A camada importada é salva no NPNT5. O fluxo antigo de importação por API (`PNGImport.insert`) permanece suportado para scripts.
+A v0.30 original rasterizava em *nearest-neighbor*; a **v0.31 acrescentou o modo Suave (bilinear) sem perder Pixelado**. A operação continua recortada no canvas e registrada como **uma única ação desfazer/refazer**. O PNG original não é alterado. A camada importada é salva no NPNT5. O fluxo antigo de importação por API (`PNGImport.insert`) permanece suportado para scripts.
 
-**Limites:** até 2.097.152 pixels no PNG de origem e na área rasterizada visível, 16 MiB de arquivo, dimensões máximas de 8.192 por lado e escala de 0,125× a 8×. Não há interpolação bilinear, alças de arraste para rotação/escala nem edição posterior como objeto inteligente. A prévia impede salvar ou editar outras camadas até aplicar/cancelar. Testar manualmente no Windows e em mesa digitalizadora continua necessário.
+**Limites:** até 2.097.152 pixels no PNG de origem e na área rasterizada visível, 16 MiB de arquivo, dimensões máximas de 8.192 por lado e escala de 0,125× a 8×. A interpolação bilinear foi acrescentada na v0.31, mas ainda não há alças de arraste para rotação/escala nem edição posterior como objeto inteligente. A prévia impede salvar ou editar outras camadas até aplicar/cancelar. Testar manualmente no Windows e em mesa digitalizadora continua necessário.
 
 ## Organização
 

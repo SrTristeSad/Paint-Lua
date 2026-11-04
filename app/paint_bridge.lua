@@ -876,6 +876,7 @@ function Bridge:importPNGBytes(model,bytes,filename)
   if not pixels then self.status='Importar PNG: '..tostring(reason);return nil,self.status end
   local ok,session=pcall(PNGImport.preview,doc,pixels,filename)
   if not ok then self.status='Importar PNG: '..tostring(session);return nil,self.status end
+  PNGImport.setInterpolation(session,'smooth')
   self.pngPreview=session
   self.pngModel=model
   self.pngDrag=nil
@@ -898,6 +899,15 @@ function Bridge:adjustPNGImport(dx,dy,scale,angle)
   if not self.pngPreview then return false end
   local ok,why=pcall(PNGImport.adjust,self.pngPreview,dx,dy,scale,angle)
   if not ok then self.status='Ajuste do PNG: '..tostring(why);return false end
+  return true
+end
+
+function Bridge:setPNGInterpolation(mode)
+  if not self.pngPreview then return false end
+  local ok,reason=pcall(PNGImport.setInterpolation,self.pngPreview,mode)
+  if not ok then self.status='Filtro PNG: '..tostring(reason);return false end
+  self.status=mode=='smooth' and 'PNG: suavização bilinear ativada'
+    or 'PNG: pixels nítidos (sem suavização)'
   return true
 end
 

@@ -34,3 +34,7 @@ A galeria agora usa miniaturas PNG derivadas dos arquivos `.npnt` e exporta comp
 `src/png_import.lua` converte PNG para camada raster em memória antes de alterar o documento, cria uma ação de histórico e preserva a origem. `Bridge:importPNGBytes`/`importPNGFromFolder` integram; a UI oferece arrastar arquivo e Back > Importar PNG / Ctrl+I. Preserve validação de tamanho/assinatura, proteção de caminho, alpha, undo/redo e compatibilidade NPNT5. Rode `texlua tests/test_core.lua` e CI com `love .` (LÖVE 11.5). A integração não significa suporte a JPEG/PSD ou validação no Windows.
 
 - v0.30: importação PNG é prévia ajustável; não adicione tiles antes de aplicar. `src/png_import.lua` reutiliza `core.transform` para geometria. Preserve API antiga `Import.insert` e testes de não alteração/cancelamento/limites.
+
+- v0.31: não confundir o filtro de visualização de canvas com a interpolação
+  da **importação PNG**. Suave usa bilinear com alfa pré-multiplicado; Pixelado
+  usa nearest; chamadas legadas `PNGImport.insert` continuam nearest.

@@ -81,13 +81,15 @@ local e2e = os.getenv("PAINT_LUA_E2E") == "1"
 local e2e_stage = 0
 local layer_e2e = os.getenv('PAINT_LUA_LAYER_E2E') == '1'
 local layer_e2e_stage = 0
+local png_filter_e2e=os.getenv('PAINT_LUA_PNG_FILTER_E2E')=='1'
+local png_filter_e2e_stage=0
 local gallery_e2e = os.getenv("PAINT_LUA_GALLERY_E2E") == "1"
 local gallery_e2e_stage = 0
 local gallery_persist_e2e=os.getenv('PAINT_LUA_GALLERY_PERSIST_E2E')
 local gallery_persist_stage=0
 -- Autotestes/capturas não devem criar dados persistentes por acidente.
 local persistence_enabled=not (smoke or e2e or layer_e2e or
-    settings_e2e or gallery_e2e or color_e2e or
+    settings_e2e or gallery_e2e or color_e2e or png_filter_e2e or
     os.getenv('PAINT_LUA_BRIDGE_E2E')=='1' or
     os.getenv('PAINT_LUA_GALLERY_STORAGE_E2E')=='1')
 local smoke_screen = os.getenv("PAINT_LUA_SCREEN") or "title"
@@ -1306,6 +1308,21 @@ local function editor_screen()
         local bw,gap=85,5
         local ox=math.max(72,(W-(bw+gap)*6)/2)
         local oy=H-158
+        -- Filtro é uma propriedade da importação, não do canvas inteiro.
+        -- A prévia na GPU e o resultado raster usam o mesmo modo.
+        local mode=paint.pngPreview.interpolation or 'pixelated'
+        local filterY=oy-45
+        rectangle(ox-7,filterY-5,382,39,C.deep,0.96,6)
+        label('PNG:',ox+3,filterY+8,51,'tiny','left',C.white)
+        for i,item in ipairs({{'Suave','smooth'},{'Pixelado','pixelated'}}) do
+            local bx=ox+59+(i-1)*152
+            local selected=mode==item[2]
+            rectangle(bx,filterY,144,29,selected and C.blue or C.panel_head,0.98,4)
+            label(item[1],bx,filterY+7,144,'small','center',C.white)
+            hit(bx,filterY,144,29,function()
+                paint:setPNGInterpolation(item[2]);notice(paint.status)
+            end,'png_mode_'..item[2])
+        end
         rectangle(ox-7,oy-7,(bw+gap)*6+9,43,C.deep,0.96,6)
         local buttons={
             {'-15°',function() paint:adjustPNGImport(0,0,1,-math.pi/12) end},
@@ -2575,6 +2592,16 @@ function love.load()
         local ok=love.window.setMode(tonumber(w),tonumber(h),{resizable=true})
         assert(ok,"Não foi possível configurar resolução de teste")
     end
+    if png_filter_e2e then
+        -- Teste visual real do controle, sem criar um projeto persistente.
+        state:open_gallery();state:open_new_canvas();state:create_canvas(64,64)
+        paint:sync(state)
+        local probe=love.image.newImageData(2,1)
+        probe:setPixel(0,0,1,0,0,1)
+        probe:setPixel(1,0,0,0,1,1)
+        assert(paint:importPNGBytes(state,probe:encode('png'):getString(),'ui.png'))
+        assert(paint:adjustPNGImport(0,0,2))
+    end
     if smoke then
         if smoke_screen=="gallery" then state:open_gallery()
         elseif smoke_screen=="gallery_new" then
@@ -2787,7 +2814,7 @@ function love.mousepressed(rx,ry,button)
         local b=controls[i]
         if x>=b.x and x<=b.x+b.w and y>=b.y and y<=b.y+b.h then
             if paint.pngPreview and not (b.key and
-                b.key:match('^png_action_')) then
+                (b.key:match('^png_action_') or b.key:match('^png_mode_'))) then
                 notice('Aplique ou cancele a importação antes de usar outros controles')
                 return
             end
@@ -3647,6 +3674,32 @@ function love.update()
     if smoke and capture_done then
         if capture_error then error("Screenshot: "..capture_error) end
         love.event.quit(0)
+    end
+    if png_filter_e2e and #controls>0 then
+        if png_filter_e2e_stage==0 then
+            assert(paint.pngPreview.interpolation=='smooth',
+                'UI: filtro inicial deveria ser suave')
+            click_control('png_mode_pixelated')
+            assert(paint.pngPreview.interpolation=='pixelated',
+                'UI: clique Pixelado não atualizou a sessão')
+            png_filter_e2e_stage=1
+        elseif png_filter_e2e_stage==1 then
+            click_control('png_mode_smooth')
+            assert(paint.pngPreview.interpolation=='smooth',
+                'UI: clique Suave não atualizou a sessão')
+            click_control('png_action_6')
+            assert(not paint.pngPreview and #paint.doc.layers==2,
+                'UI: aplicar PNG não criou uma camada')
+            local tile=assert(paint.doc.layers[2].tiles['0,0'])
+            local red,_,blue,alpha=tile:getPixel(31,31)
+            assert(red>0.70 and red<0.80 and blue>0.20 and blue<0.30 and alpha>0.99,
+                'UI: filtro suave não foi usado na rasterização')
+            assert(#paint.doc.history.undo==1,
+                'UI: aplicar PNG não deve criar mais de uma entrada no histórico')
+            print('PASS: interface LÖVE v0.31: cliques Suave/Pixelado e aplicação real')
+            love.event.quit(0)
+        end
+        return
     end
     -- Each stage runs after a draw; hitboxes represent the visible UI.
     if color_e2e and #controls>0 then

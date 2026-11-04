@@ -76,7 +76,15 @@ function Import.preview(doc,pixels,filename)
   assert(validSize(w,h),'PNG excede os limites')
   return {source=pixels,filename=filename,x=floor((doc.w-w)/2),
     y=floor((doc.h-h)/2),w=w,h=h,dx=0,dy=0,
-    scaleX=1,scaleY=1,angle=0,active=true}
+    scaleX=1,scaleY=1,angle=0,active=true,interpolation='pixelated'}
+end
+-- O modo antigo permanece pixelated para chamadas diretas a Import.insert.
+-- A interface habilita smooth na sessão visual, com alternância explícita.
+function Import.setInterpolation(session,mode)
+  assert(session and session.active,'prévia de PNG encerrada')
+  assert(mode=='smooth' or mode=='pixelated','interpolação desconhecida')
+  session.interpolation=mode
+  return mode
 end
 function Import.adjust(session,dx,dy,scale,angle)
   return Transform.set(session,session.dx+(dx or 0),session.dy+(dy or 0),
@@ -86,6 +94,30 @@ end
 function Import.bounds(session) return Transform.bounds(session) end
 function Import.drawPreview(session,x,y) return Transform.drawPreview(session,x,y) end
 function Import.cancel(session) return Transform.cancel(session) end
+
+-- Amostra bilinear com cores pré-multiplicadas por alfa.
+-- Interpolar RGB diretamente produz halos escuros/coloridos na borda de PNGs
+-- transparentes. As coordenadas são centros dos pixels da imagem original.
+-- As bordas usam clamp, como a textura com filtro linear no LÖVE.
+local function bilinear(pixels,w,h,u,v)
+  local x=u-0.5
+  local y=v-0.5
+  local ix,iy=floor(x),floor(y)
+  local fx,fy=x-ix,y-iy
+  local x0,x1=max(0,min(w-1,ix)),max(0,min(w-1,ix+1))
+  local y0,y1=max(0,min(h-1,iy)),max(0,min(h-1,iy+1))
+  local r00,g00,b00,a00=pixels:getPixel(x0,y0)
+  local r10,g10,b10,a10=pixels:getPixel(x1,y0)
+  local r01,g01,b01,a01=pixels:getPixel(x0,y1)
+  local r11,g11,b11,a11=pixels:getPixel(x1,y1)
+  local w00,w10=(1-fx)*(1-fy),fx*(1-fy)
+  local w01,w11=(1-fx)*fy,fx*fy
+  local aa=a00*w00+a10*w10+a01*w01+a11*w11
+  if aa<=0 then return 0,0,0,0 end
+  return (r00*a00*w00+r10*a10*w10+r01*a01*w01+r11*a11*w11)/aa,
+    (g00*a00*w00+g10*a10*w10+g01*a01*w01+g11*a11*w11)/aa,
+    (b00*a00*w00+b10*a10*w10+b01*a01*w01+b11*a11*w11)/aa,aa
+end
 
 -- Posiciona a imagem no centro do canvas. Partes fora do documento são
 -- recortadas; pixels transparentes não criam tiles desnecessários.
@@ -102,6 +134,9 @@ function Import.insert(doc, pixels, filename, placement)
   local session=placement or Import.preview(doc,pixels,filename)
   if not session or session.source~=pixels or not session.active then
     return nil,'prévia de PNG inválida'
+  end
+  if session.interpolation~='smooth' and session.interpolation~='pixelated' then
+    return nil,'modo de interpolação inválido'
   end
   local ok,bounds=pcall(Transform.bounds,session)
   if not ok then return nil,'transformação PNG inválida: '..tostring(bounds) end
@@ -123,7 +158,12 @@ function Import.insert(doc, pixels, filename, placement)
         local sx,sy=Transform.inverse(session,x+0.5,y+0.5)
         local ix,iy=floor(sx-session.x),floor(sy-session.y)
         if ix>=0 and iy>=0 and ix<w and iy<h then
-          local r,g,b,a=pixels:getPixel(ix,iy)
+          local r,g,b,a
+          if session.interpolation=='smooth' then
+            r,g,b,a=bilinear(pixels,w,h,sx-session.x,sy-session.y)
+          else
+            r,g,b,a=pixels:getPixel(ix,iy)
+          end
           if a>0 then
             local tx,ty=floor(x/Doc.TILE),floor(y/Doc.TILE)
             local tile,key=Doc.getTile(detached,tx,ty,true)

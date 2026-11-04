@@ -379,3 +379,48 @@ assert(placementBridge:load(placementModel))
 assert(#placementBridge.doc.layers==2)
 love.filesystem.remove(placementBridge.filename)
 print('PASS: LÖVE v0.30: prévia PNG, zoom, mover, cancelar, undo e NPNT5')
+
+-- v0.31: filtro alterável com prévia na GPU e PNG RGBA real do decodificador.
+local smoothModel=Model.new()
+smoothModel:open_gallery();smoothModel:open_new_canvas();smoothModel:create_canvas(64,64)
+local smoothBridge=Bridge.new()
+local smoothDoc=assert(smoothBridge:sync(smoothModel))
+local bar=love.image.newImageData(2,1)
+bar:setPixel(0,0,1,0,0,1)
+bar:setPixel(1,0,0,0,1,1)
+local barBytes=bar:encode('png'):getString()
+assert(smoothBridge:importPNGBytes(smoothModel,barBytes,'degrade.png'))
+assert(smoothBridge.pngPreview.interpolation=='smooth',
+  'filtro suave deveria ser o padrão da UI')
+assert(smoothBridge:adjustPNGImport(0,0,2))
+local session=smoothBridge.pngPreview
+local undoBefore=#smoothDoc.history.undo
+assert(#smoothDoc.layers==1 and undoBefore==0,'filtro não deve alterar a obra na prévia')
+assert(smoothBridge:setPNGInterpolation('pixelated'))
+assert(session.interpolation=='pixelated')
+assert(smoothBridge:setPNGInterpolation('smooth'))
+local drawOK,drawErr=pcall(smoothBridge.drawPNGImport,smoothBridge,0,0)
+assert(drawOK,'prévia GPU real falhou: '..tostring(drawErr))
+assert(session.previewFilter=='linear','prévia GPU não aplicou linear')
+assert(smoothBridge:setPNGInterpolation('pixelated'))
+smoothBridge:drawPNGImport(0,0)
+assert(session.previewFilter=='nearest','filtro GPU não alternou para nearest')
+assert(smoothBridge:setPNGInterpolation('smooth'))
+assert(smoothBridge:applyPNGImport(smoothModel))
+assert(#smoothDoc.layers==2 and #smoothDoc.history.undo==undoBefore+1)
+local tile=assert(smoothDoc.layers[2].tiles['0,0'])
+local r,g,b,a=tile:getPixel(31,31)
+assert(math.abs(r-0.75)<0.008 and math.abs(g)<0.008 and
+  math.abs(b-0.25)<0.008 and math.abs(a-1)<0.008,
+  'PNG bilinear com ImageData real não interpolou as cores')
+assert(smoothBridge:historyStep(smoothModel,false) and #smoothDoc.layers==1)
+assert(smoothBridge:historyStep(smoothModel,true) and #smoothDoc.layers==2)
+smoothBridge.filename='ci-paint-lua-v031.npnt'
+assert(smoothBridge:save(),'não salvou PNG interpolado')
+assert(smoothBridge:load(smoothModel),'não reabriu PNG interpolado')
+local reopened=assert(smoothBridge.doc.layers[2].tiles['0,0'])
+local rr,_,bb,aa=reopened:getPixel(31,31)
+assert(math.abs(rr-0.75)<0.008 and math.abs(bb-0.25)<0.008 and
+  math.abs(aa-1)<0.008,'NPNT5 não preservou pixel suave')
+love.filesystem.remove(smoothBridge.filename)
+print('PASS: LÖVE v0.31: PNG bilinear RGBA, filtro GPU, histórico e NPNT5')

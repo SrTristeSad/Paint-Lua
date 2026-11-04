@@ -49,3 +49,12 @@ A galeria agora usa miniaturas PNG derivadas dos arquivos `.npnt` e exporta comp
 
 ## Evolução v0.30
 A importação PNG (v0.29) agora oferece prévia posicionável com escala/rotação antes do commit. A API `Import.insert` permanece disponível; a UI chama `Bridge:importPNGBytes` para iniciar a sessão e `Bridge:applyPNGImport` ou `Bridge:cancelPNGImport` para concluir. Geometria reusada de `core.transform`. O commit do PNG é uma única ação no histórico. Não reverter para importação imediata sem discussão com o criador. Teste no LÖVE e manual Windows ainda são prioridades.
+
+## Estado v0.31
+
+Importação PNG com prévia ajustável de v0.30 agora possui filtro Suave (bilinear
+pré-multiplicado por alfa) e Pixelado (nearest) no painel. A interface inicia em
+Suave; a API `PNGImport.insert` sem sessão mantém Pixelado por compatibilidade.
+A prévia na GPU e a rasterização final CPU usam o mesmo modo. Ver
+`docs/INTERPOLACAO_PNG_v031.md`. Não trocar filtro de transformações de
+seleção ou do canvas, nem reescrever o núcleo.
