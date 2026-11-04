@@ -20,13 +20,22 @@ Clone alternativo: git clone https://github.com/SrTristeSad/Paint-Lua.git (sem -
 - **main.lua**, **conf.lua**, **testar.bat**: inicialização.
 - **tests/**, **tools/**, **docs/**: testes e documentação da interface e do núcleo.
 
-## Novidade v0.28 — galeria de múltiplas obras
+## Novidade v0.27 — galeria de múltiplas obras
 
 A **My Gallery** agora persiste obras diferentes em arquivos NPNT separados, com pastas, títulos e movimentação de itens preservados após reiniciar o programa. O editor **salva automaticamente ao voltar à galeria e ao encerrar normalmente**, além de permitir `Ctrl+S`. Ele mostra erro e mantém a edição aberta quando o salvamento falha. Um arquivo ausente/corrompido não é substituído por um canvas em branco.
 
 O catálogo alterna entre dois índices validados, e cada obra mantém uma cópia de segurança anterior ao sobrescrever; o formato de projeto continua **NPNT1–NPNT5**. Ao iniciar sem catálogo, tenta importar o antigo `meu-desenho.npnt` sem apagá-lo. O repositório e o ZIP continuam completamente independentes do Ibis-Lua.
 
-Consulte [docs/GALERIA_PERSISTENTE_v027.md](docs/GALERIA_PERSISTENTE_v027.md) para limites e recuperação. **Ainda não existe galeria na nuvem, exclusão definitiva nem miniaturas reais das obras na galeria**; as miniaturas de camadas continuam funcionando. Dados ficam no diretório de salvamento do LÖVE, não junto ao executável.
+Consulte [docs/GALERIA_PERSISTENTE_v027.md](docs/GALERIA_PERSISTENTE_v027.md) para limites e recuperação. **Ainda não existe galeria na nuvem nem exclusão definitiva.** As miniaturas reais de obras foram adicionadas na v0.28, além das miniaturas de camadas. Dados ficam no diretório de salvamento do LÖVE, não junto ao executável.
+
+## Novidade v0.28 — miniaturas reais e exportação PNG
+
+- A galeria exibe **prévias reais da composição** em arquivos PNG de 160×160, incluindo efeitos de máscaras e grupos. Elas são derivadas do NPNT: miniatura ausente ou inválida pode ser reconstruída sem substituir o arquivo da obra.
+- O carregamento das prévias é **parcelado (até uma por quadro)** e usa cache de imagens limitado, para reduzir travamentos ao navegar por muitas obras.
+- **Exportar PNG no editor:** abra **Back → Exportar PNG**. **Exportar pela galeria:** selecione uma única obra e use o ícone de download da barra superior. A galeria mostra o caminho completo do PNG gerado.
+- O PNG final preserva transparência RGBA, mas o limite inicial é de **4.194.304 pixels, até 8.192 por lado**. Exportações recebem novos nomes (`obra-2.png`, `obra-2-2.png` etc.) e **não sobrescrevem** anteriores.
+- Os PNGs são criados no diretório de dados do LÖVE, dentro da pasta `exports/`, **não ao lado do .bat**. No Windows, normalmente fica em `%APPDATA%\LOVE\paint-lua\exports`. O caminho exato é mostrado pelo aplicativo.
+- **Não há exportação JPEG, PSD ou importação de PNG** nesta etapa. Os arquivos originais continuam em `.npnt`.
 
 ## Situação funcional
 

@@ -192,12 +192,19 @@ local function build_next_gallery_thumbnail()
         if gallery_thumb_pending[id] then
             gallery_thumb_pending[id]=nil
             local bytes=GalleryStorage.ensureThumbnail(id)
-            local image
-            if bytes then
+            local function decode_preview(raw)
+                if not raw then return nil end
                 local ok,result=pcall(function()
-                    return love.graphics.newImage(love.filesystem.newFileData(bytes,'preview.png'))
+                    return love.graphics.newImage(love.filesystem.newFileData(raw,'preview.png'))
                 end)
-                if ok then image=result;image:setFilter('linear','linear') end
+                if ok then result:setFilter('linear','linear');return result end
+                return nil
+            end
+            local image=decode_preview(bytes)
+            if bytes and not image then
+                -- Um PNG pode ter assinatura válida e dados internos corrompidos.
+                -- Reconstruir a prévia derivada; nunca substituir a pintura NPNT.
+                image=decode_preview(GalleryStorage.ensureThumbnail(id,true))
             end
             gallery_thumb_clock=gallery_thumb_clock+1
             gallery_thumb_cache[id]={image=image,t=gallery_thumb_clock}
@@ -477,7 +484,7 @@ local function gallery_header()
             local doc,err=GalleryStorage.loadArtwork(picked)
             if not doc then notice('Não foi possível abrir a obra: '..tostring(err));return end
             local path,why=PNGExport.save(doc,picked)
-            if path then notice('PNG exportado em '..path)
+            if path then notice('PNG em '..love.filesystem.getSaveDirectory()..'/'..path)
             else notice('PNG: '..tostring(why)) end
         end},
         {"more",function() gallery_menu=gallery_menu=="more" and nil or "more" end}

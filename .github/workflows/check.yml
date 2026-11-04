@@ -1,7 +1,7 @@
 name: Paint-Lua v0.28 — miniaturas compostas e exportação PNG
 on:
   push:
-    branches: [main, feature/paint-v028-previews-png]
+    branches: [main, feature/paint-v028-previews-png, feature/paint-v028-preview-recovery]
   pull_request:
 jobs:
   checks:
@@ -30,7 +30,7 @@ jobs:
         run: |
           lua5.4 tests/test_core.lua > core-results.log
           tail -n 5 core-results.log
-          grep -Eq '1029 passou, 0 falhou' core-results.log
+          grep -Eq '1031 passou, 0 falhou' core-results.log
       - name: Testes do modelo e navegação
         run: |
           lua5.4 scripts/smoke-core.lua

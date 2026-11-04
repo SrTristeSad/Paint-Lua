@@ -246,8 +246,9 @@ function S.saveThumbnail(doc,id)
   return write(S.thumbnailPath(id),encoded)
 end
 
-function S.ensureThumbnail(id)
-  local bytes=S.thumbnailBytes(id)
+function S.ensureThumbnail(id,force)
+  -- force=true permite reconstruir um PNG inválido sem tocar no NPNT original.
+  local bytes=not force and S.thumbnailBytes(id)
   if bytes then return bytes end
   local doc,err=S.loadArtwork(id)
   if not doc then return nil,err end
