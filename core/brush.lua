@@ -447,7 +447,7 @@ B.impl = "lua"
 local useFFI = HAS_JIT
 
 local function dabDispatch(doc, layer, h, cx, cy, o)
-  if o.alphaLock then
+  if o.alphaLock and o.target ~= "mask" then
     -- FFI não altera alfa em modo de bloqueio até haver teste de paridade.
     B.impl='lua-alpha-lock'
     if not o.eraser then return dabLua(doc,layer,h,cx,cy,o) end
