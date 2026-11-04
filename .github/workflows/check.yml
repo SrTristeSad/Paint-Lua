@@ -1,7 +1,7 @@
 name: Paint-Lua v0.28 — miniaturas compostas e exportação PNG
 on:
   push:
-    branches: [main, feature/paint-v027-gallery]
+    branches: [main, feature/paint-v028-previews-png]
   pull_request:
 jobs:
   checks:
