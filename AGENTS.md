@@ -15,3 +15,6 @@
   `core/history.lua` suporta histórico combinado de pixels+seleção. Não quebrar undo único
   ou a compatibilidade NPNT1–NPNT5. Não oferecer transformação ilimitada sem avaliação
   de memória/CPU; limite atual de 1 milhão de pixels.
+
+- v0.25: painel `layer_advanced` com 3 abas; `Bridge:layerMaskAction`, `Bridge:groupAction`, `Bridge:editMask` etc. reutilizam APIs existentes de `core.layers`, `core.groups` e `core.stroke`. O modo de máscara não deve modificar os pixels RGBA, e a UI deve manter coerência após undo/redo e load.
+- Execute `texlua tests/test_core.lua` (969 verificações simuladas) e CI LÖVE 11.5. Nova camada no fim da pilha herda groupId quando aplicável. Veja `docs/GRUPOS_MASCARAS_v025.md`.

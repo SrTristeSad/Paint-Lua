@@ -22,9 +22,17 @@ Clone alternativo: git clone https://github.com/SrTristeSad/Paint-Lua.git (sem -
 
 ## Situação funcional
 
-A UI disponibiliza tela inicial, galeria, New Canvas, ferramentas, janelas de pincel, cores e camadas. O motor é responsável por pixels reais: **pintura, borracha, balde cooperativo, conta-gotas, Alpha Lock durante a sessão, camadas, recorte, desfazer/refazer e salvar/reabrir .npnt**. Zoom, rotação e pan usam a UI. Vários controles de filtros, máscaras, grupos e galeria **ainda são demonstrativos ou parcialmente integrados**. Não se deve assumir que um botão que existe na interface altera pixels.
+A UI disponibiliza tela inicial, galeria, New Canvas, ferramentas, janelas de pincel, cores e camadas. O motor é responsável por pixels reais: **pintura, borracha, balde cooperativo, conta-gotas, Alpha Lock durante a sessão, camadas, recorte, desfazer/refazer e salvar/reabrir .npnt**. Zoom, rotação e pan usam a UI. Vários controles de filtros e galeria **ainda são demonstrativos ou parcialmente integrados**. A v0.25 conecta máscaras de camada e grupo, além de criar/desagrupar grupos, ao núcleo real. Não se deve assumir que um botão que existe na interface altera pixels.
 
-A bateria do núcleo foi incorporada ao repositório na v0.23: **926 testes aprovados em texlua com mocks**, incluindo seleção, laço e NPNT5. A integração do editor também é verificada em LÖVE 11.5 real em Linux com display virtual. A integração básica passou em **LÖVE 11.5 real em Linux sob display virtual**, incluindo pincel, undo/redo e NPNT. Ainda são necessários testes manuais no Windows, desempenho e uso de caneta/tablet.
+A bateria do núcleo foi incorporada ao repositório na v0.23: **969 testes aprovados em texlua com mocks**, incluindo seleção, laço e NPNT5. A integração do editor também é verificada em LÖVE 11.5 real em Linux com display virtual. A integração básica passou em **LÖVE 11.5 real em Linux sob display virtual**, incluindo pincel, undo/redo e NPNT. Ainda são necessários testes manuais no Windows, desempenho e uso de caneta/tablet.
+
+## Grupos e máscaras v0.25
+
+O painel **Layer → Grupos / Máscaras >** agora oferece três abas adaptáveis a janelas menores: **Grupos**, **Máscara camada** e **Máscara grupo**. É possível criar grupos de uma camada ou de duas camadas adjacentes, desfazer o grupo, alternar visibilidade e controlar opacidade em passos de 10%. Ao adicionar nova camada no fim da pilha, ela herda o grupo da anterior.
+
+As máscaras são **não destrutivas**: adicionar, remover, ativar/desativar, inverter e pintar com pincel/borracha usam as APIs reais do núcleo, com histórico e salvamento `.npnt` (NPNT5). No modo de edição, pincel revela e borracha esconde; **Pintar pixels** volta à imagem original. Os avisos `[G]` e `[M]` aparecem ao lado das camadas, mas as miniaturas continuam demonstrativas. [Instruções, limites e testes](docs/GRUPOS_MASCARAS_v025.md).
+
+**Limitações:** não há ainda controle de grupos por arraste livre, thumbnails reais de máscaras, feather ou operação em lote de várias camadas. A interface não é uma cópia do ibisPaint oficial e funcionalidades não conectadas continuam demonstrativas.
 
 ## Transformação v0.24 — prévia não destrutiva
 

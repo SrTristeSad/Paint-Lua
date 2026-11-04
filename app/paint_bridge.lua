@@ -9,6 +9,8 @@ local Fill = require('core.fill')
 local Job = require('core.job')
 local Selection = require('core.selection')
 local Transform = require('core.transform')
+local Layers = require('core.layers')
+local Groups = require('core.groups')
 
 local Bridge = {}
 Bridge.__index = Bridge
@@ -30,8 +32,8 @@ end
 function Bridge.new()
   return setmetatable({doc=nil,modelDocument=nil,byId={},uiByLayer={},
     stroke=nil,job=nil,jobKind=nil,selectionDrag=nil,transform=nil,transformDrag=nil,
-    cache=nil,gpu={},
-    filename='meu-desenho.npnt',status='Paint-Lua v0.23 pronto'},Bridge)
+    cache=nil,gpu={},maskMode=nil,maskOwner=nil,
+    filename='meu-desenho.npnt',status='Paint-Lua v0.25 pronto'},Bridge)
 end
 
 function Bridge:dropImages()
@@ -63,6 +65,7 @@ function Bridge:sync(model)
     self:dropImages()
     self.selectionDrag=nil
     self:cancelTransform()
+    self.maskMode,self.maskOwner=nil,nil
     self.doc=Doc.new(model.document.width,model.document.height,'Paint-Lua')
     self.doc.layers={}
     self.byId={}
@@ -75,7 +78,13 @@ function Bridge:sync(model)
   local changed = #doc.layers~=#model.layers
   for i,entry in ipairs(model.layers) do
     local layer=self.byId[entry.id]
-    if not layer then layer=Doc.newLayer(entry.name) end
+    if not layer then
+      layer=Doc.newLayer(entry.name)
+      -- Camada nova no final de um grupo continua como sua filha.
+      -- O modelo da UI insere camadas sempre ao fim da lista.
+      local prev=nextLayers[i-1]
+      if i==#doc.layers+1 and prev then layer.groupId=prev.groupId end
+    end
     nextLayers[i]=layer
     nextMap[entry.id]=layer
     self.uiByLayer[layer]=entry
@@ -144,6 +153,152 @@ function Bridge:refreshModel(model)
   self.byId=nextMap
 end
 
+-- Controles avançados do painel Layer. Mutacoes de mascara/grupo usam
+-- as APIs transacionais do nucleo; nunca reimplementamos rasterizacao na UI.
+function Bridge:canEditStructure(model)
+  local doc=self:sync(model)
+  if not doc then self.status='Abra um documento';return nil end
+  if self.stroke or self.job or self.transform or self.selectionDrag then
+    self.status='Finalize a operação atual antes de editar camadas';return nil
+  end
+  return doc
+end
+
+function Bridge:activeGroup(model)
+  local doc=self.doc
+  local layer=doc and doc.layers[doc.sel]
+  return layer and layer.groupId and doc.groups[layer.groupId] or nil
+end
+
+function Bridge:maskEditMode(model)
+  local layer=self.doc and self.doc.layers[self.doc.sel]
+  if not layer then self.maskMode,self.maskOwner=nil,nil;return nil end
+  if self.maskMode=='layer' then
+    if layer==self.maskOwner and layer.mask then return 'layer' end
+  elseif self.maskMode=='group' then
+    local group=self:activeGroup(model)
+    if group and group.id==self.maskOwner and group.mask then return 'group' end
+  end
+  self.maskMode,self.maskOwner=nil,nil
+  return nil
+end
+
+function Bridge:editPixels()
+  self:finish(false)
+  self.maskMode,self.maskOwner=nil,nil
+  self.status='Pintando pixels da camada'
+  return true
+end
+
+function Bridge:editMask(model,kind)
+  local doc=self:canEditStructure(model)
+  if not doc then return false end
+  assert(kind=='layer' or kind=='group','destino de máscara inválido')
+  local layer=doc.layers[doc.sel]
+  local group=self:activeGroup(model)
+  local owner=kind=='layer' and layer or group
+  if not owner or not owner.mask then
+    self.status='Adicione uma máscara antes de editá-la';return false
+  end
+  if self.maskMode==kind and self.maskOwner==(kind=='layer' and layer or group.id) then
+    return self:editPixels()
+  end
+  self.maskMode=kind
+  self.maskOwner=kind=='layer' and layer or group.id
+  if model.active_tool~='brush' and model.active_tool~='eraser' then
+    model:set_tool('brush')
+  end
+  self.status='Máscara '..(kind=='layer' and 'da camada' or 'do grupo')..
+    ': Pincel revela (branco); Borracha esconde (preto)'
+  return true
+end
+
+local function invoke(self,fn,success)
+  local ok,result=pcall(fn)
+  if not ok then self.status=tostring(result);return false end
+  if result==false then return false end
+  self.status=success
+  return true
+end
+
+function Bridge:layerMaskAction(model,action)
+  local doc=self:canEditStructure(model)
+  if not doc then return false end
+  local index=doc.sel
+  local mask=doc.layers[index].mask
+  if action=='add' then
+    if mask then self.status='Esta camada já tem máscara';return false end
+    return invoke(self,function() return Layers.addMask(doc,index,1) end,'Máscara da camada criada')
+  elseif action=='remove' then
+    if not mask then self.status='Camada sem máscara';return false end
+    self:editPixels()
+    return invoke(self,function() return Layers.removeMask(doc,index) end,'Máscara da camada removida')
+  elseif not mask then self.status='Adicione uma máscara primeiro';return false
+  elseif action=='enabled' then
+    return invoke(self,function() return Layers.setMaskEnabled(doc,index,not mask.enabled) end,
+      mask.enabled and 'Máscara desativada' or 'Máscara ativada')
+  elseif action=='inverted' then
+    return invoke(self,function() return Layers.setMaskInverted(doc,index,not mask.inverted) end,
+      mask.inverted and 'Máscara normalizada' or 'Máscara invertida')
+  end
+  self.status='Comando de máscara desconhecido';return false
+end
+
+function Bridge:createGroup(model,pair)
+  local doc=self:canEditStructure(model)
+  if not doc then return false end
+  local last=doc.sel
+  local first=pair and last-1 or last
+  if first<1 then self.status='Não há camada inferior para agrupar';return false end
+  local id=doc.nextGroupId or 1
+  return invoke(self,function() return Groups.create(doc,first,last,'Grupo '..id) end,
+    pair and 'Duas camadas agrupadas' or 'Grupo criado')
+end
+
+function Bridge:ungroup(model)
+  local doc=self:canEditStructure(model)
+  if not doc then return false end
+  local group=self:activeGroup(model)
+  if not group then self.status='Camada fora de grupo';return false end
+  self:editPixels()
+  return invoke(self,function() return Groups.ungroup(doc,group.id) end,'Grupo desfeito')
+end
+
+function Bridge:groupAction(model,action)
+  local doc=self:canEditStructure(model)
+  if not doc then return false end
+  local group=self:activeGroup(model)
+  if not group then self.status='Selecione uma camada de um grupo';return false end
+  local id=group.id
+  if action=='visible' then
+    return invoke(self,function() return Groups.setVisible(doc,id,not group.visible) end,
+      group.visible and 'Grupo oculto' or 'Grupo visível')
+  elseif action=='opacityMinus' or action=='opacityPlus' then
+    local sign=action=='opacityMinus' and -10 or 10
+    local new=clamp(group.opacity+sign,0,100)
+    if new==group.opacity then self.status='Opacidade do grupo no limite';return false end
+    return invoke(self,function() return Groups.setOpacity(doc,id,new) end,
+      ('Opacidade do grupo: %d%%'):format(new))
+  elseif action=='addMask' then
+    if group.mask then self.status='Grupo já tem máscara';return false end
+    return invoke(self,function() return Groups.addMask(doc,id,1) end,'Máscara do grupo criada')
+  elseif action=='removeMask' then
+    if not group.mask then self.status='Grupo sem máscara';return false end
+    self:editPixels()
+    return invoke(self,function() return Groups.removeMask(doc,id) end,'Máscara do grupo removida')
+  end
+  if not group.mask then self.status='Adicione uma máscara ao grupo';return false end
+  local m=group.mask
+  if action=='maskEnabled' then
+    return invoke(self,function() return Groups.setMaskEnabled(doc,id,not m.enabled) end,
+      m.enabled and 'Máscara do grupo desativada' or 'Máscara do grupo ativada')
+  elseif action=='maskInverted' then
+    return invoke(self,function() return Groups.setMaskInverted(doc,id,not m.inverted) end,
+      m.inverted and 'Máscara do grupo normalizada' or 'Máscara do grupo invertida')
+  end
+  self.status='Comando de grupo desconhecido';return false
+end
+
 -- Coordenadas inversas da transformacao usada pelo editor Ibis-Lua.
 function Bridge:toCanvas(model,view,prefs,uiScale,W,H,rx,ry)
   if not self:sync(model) then return nil end
@@ -210,6 +365,7 @@ function Bridge:press(model,view,prefs,uiScale,W,H,rx,ry,opacity)
   if model.active_tool=='bucket' then return self:bucket(model,px,py,opacity) end
   local entry=model:active_layer()
   if entry.locked then self.status='Camada bloqueada';return false end
+  local maskMode=self:maskEditMode(model)
   local opts={
     size=clamp(model.brush_size or 1,0.1,1000),
     alpha=clamp((opacity or 100)/100,0,1), hardness=0.85,
@@ -218,7 +374,22 @@ function Bridge:press(model,view,prefs,uiScale,W,H,rx,ry,opacity)
     selection=self.doc.selection, pressureSize=false,
     smoothing={mode='exponential',amount=0.30,catchUpOnEnd=true},
   }
-  local ok,stroke=pcall(Stroke.new,self.doc,self.doc.layers[self.doc.sel],self.doc.history,opts)
+  local ok,stroke
+  if maskMode then
+    opts.alphaLock=nil
+    opts.color={1,1,1}
+    opts.maskValue=entry and (model.active_tool=='eraser' and 0 or 1) or 1
+    if maskMode=='layer' then
+      ok,stroke=pcall(Stroke.newMask,self.doc,self.doc.layers[self.doc.sel],
+        self.doc.history,opts)
+    else
+      local group=self:activeGroup(model)
+      ok,stroke=pcall(Stroke.newGroupMask,self.doc,group.id,self.doc.history,opts)
+    end
+  else
+    ok,stroke=pcall(Stroke.new,self.doc,self.doc.layers[self.doc.sel],
+      self.doc.history,opts)
+  end
   if not ok then self.status='Pincel: '..tostring(stroke);return false end
   self.stroke=stroke
   self:move(model,view,prefs,uiScale,W,H,rx,ry)
@@ -550,6 +721,7 @@ function Bridge:load(model)
   self:finish(true)
   self:cancelJob()
   self.selectionDrag=nil
+  self.maskMode,self.maskOwner=nil,nil
   local ok,doc,err=pcall(Project.load,self.filename)
   if not ok or not doc then
     self.status='Abertura: '..tostring(ok and err or doc)
@@ -587,7 +759,10 @@ function Bridge:historyStep(model,redo)
   local ok,changed=pcall(fn,self.doc)
   self.status=not ok and tostring(changed) or
     (changed and (redo and 'Refeito' or 'Desfeito') or 'Nada para alterar')
-  if ok and changed then self:refreshModel(model) end
+  if ok and changed then
+    self:refreshModel(model)
+    self:maskEditMode(model) -- undo pode excluir a máscara ou o grupo ativo
+  end
   return ok and changed or false
 end
 

@@ -195,3 +195,58 @@ assert(select(4,selectionBridge.doc.layers[selectionBridge.doc.sel].tiles['0,0']
   'NPNT5 não preservou pixels transformados')
 love.filesystem.remove(selectionBridge.filename)
 print('PASS: LÖVE real v0.24: transformar, preview, undo/redo e NPNT5')
+
+-- v0.25: máscaras de camada/grupo e pintura do grupo em ImageData real.
+local Doc=require('core.doc')
+local maskedModel=Model.new()
+maskedModel:open_gallery();maskedModel:open_new_canvas();maskedModel:create_canvas(64,64)
+local maskedBridge=Bridge.new()
+local maskedDoc=assert(maskedBridge:sync(maskedModel))
+local mLayer=maskedDoc.layers[1]
+local mTile=Doc.getTile(mLayer,0,0,true)
+mTile:setPixel(32,32,0.9,0.2,0.1,1)
+Doc.markDirty(mLayer,'0,0')
+local Composite=require('core.composite')
+local function compositeAlpha()
+  return select(4,Composite.flattenRegion(maskedDoc,32,32,1,1):getPixel(0,0))
+end
+assert(compositeAlpha()>0.9)
+assert(maskedBridge:layerMaskAction(maskedModel,'add'))
+assert(maskedBridge:editMask(maskedModel,'layer'))
+maskedModel:set_tool('eraser')
+maskedModel:set_brush_size(12)
+assert(maskedBridge:press(maskedModel,view,preferences,1,1024,768,cx,cy,100))
+maskedBridge:finish(false)
+assert(compositeAlpha()<0.01,'máscara da camada não escondeu o pixel')
+assert(select(4,mTile:getPixel(32,32))==1,'máscara apagou imagem original')
+assert(maskedBridge:historyStep(maskedModel,false) and compositeAlpha()>0.9,
+  'undo da máscara de camada')
+assert(maskedBridge:historyStep(maskedModel,true) and compositeAlpha()<0.01,
+  'redo da máscara de camada')
+assert(maskedBridge:layerMaskAction(maskedModel,'inverted'))
+assert(compositeAlpha()>0.9,'inversão de máscara não funcionou')
+assert(maskedBridge:editPixels())
+maskedModel:add_layer();maskedBridge:sync(maskedModel)
+assert(maskedBridge:createGroup(maskedModel,true))
+assert(require('core.groups').validate(maskedDoc))
+local mg=assert(maskedBridge:activeGroup(maskedModel))
+assert(maskedBridge:groupAction(maskedModel,'addMask'))
+assert(mg.mask and maskedBridge:editMask(maskedModel,'group'))
+assert(maskedBridge:press(maskedModel,view,preferences,1,1024,768,cx,cy,100))
+maskedBridge:finish(false)
+assert(compositeAlpha()<0.01,'máscara do grupo não escondeu a composição')
+assert(maskedBridge:historyStep(maskedModel,false) and compositeAlpha()>0.9,
+  'undo máscara de grupo')
+assert(maskedBridge:historyStep(maskedModel,true) and compositeAlpha()<0.01,
+  'redo máscara de grupo')
+maskedBridge.filename='ci-paint-lua-v025.npnt'
+assert(maskedBridge:save(),'não salvou documento com grupos e máscaras')
+assert(maskedBridge:load(maskedModel),'não reabriu documento com grupos e máscaras')
+local opened=maskedBridge.doc
+local gid=opened.layers[1].groupId
+assert(gid and opened.groups[gid] and opened.groups[gid].mask,
+  'NPNT5 não preservou máscara de grupo')
+assert(opened.layers[1].mask and opened.layers[1].mask.inverted,
+  'NPNT5 não preservou máscara invertida de camada')
+love.filesystem.remove(maskedBridge.filename)
+print('PASS: LÖVE real v0.25: máscaras de camada/grupo, pintura, undo/redo e NPNT5')

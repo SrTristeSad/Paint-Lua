@@ -1,7 +1,7 @@
 -- Ibis-Lua. Windows reference-based UI reconstruction, not the official application.
 -- Layout evidence: Windows gallery/new canvas (Uptodown), Windows tool editor
 -- (Microsoft Store, independent Windows screenshots), official tool manual.
--- Fidelity to version 14.1.4 is NOT certified. Painting basic tools use Paint-Lua core v0.21.
+-- Interface própria baseada no Ibis-Lua, ligada ao motor Paint-Lua v0.25.
 local PaintBridge = require("app.paint_bridge")
 local Model = require("src.model")
 local Viewport = require("src.viewport")
@@ -55,6 +55,7 @@ local input_replace = true
 local layer_press = nil
 local layer_position, layer_size, drag_layer, drag_layer_resize, drag_opacity = nil, nil, nil, nil, nil
 local layer_blend_open = false
+local layer_advanced_tab = 'group'
 local selected_brush, palette_index = 1, 1
 local brush_scroll=0
 local brush_search_active=false
@@ -961,6 +962,12 @@ local function editor_screen()
     rectangle(0,34,W,1,C.card_border,0.18)
     local header_left=preferences.tool_position=="left" and 73 or 20
     label("PAINT LUA",header_left,10,107,"small","left",C.white)
+    local maskMode=paint:maskEditMode(state)
+    if maskMode then
+        label(maskMode=='layer' and 'PINTANDO MÁSCARA DA CAMADA'
+            or 'PINTANDO MÁSCARA DO GRUPO',header_left+445,10,
+            math.max(110,W-header_left-540),'tiny','left',C.accent_light)
+    end
     rectangle(header_left+101,12,1,13,C.card_border,0.3)
     label(string.format("Documento  ·  %d × %d px",
         state.document.width,state.document.height),
@@ -1219,6 +1226,9 @@ function draw_editor_panel()
     elseif name=="grid_settings" then
         w=math.min(370,W-90);h=440
         x=W-w-20;y=50
+    elseif name=="layer_advanced" then
+        w=math.min(460,W-90);h=math.min(410,H-110)
+        x=W-w-22;y=math.max(48,math.min(65,H-h-55))
     elseif name=="layer" then
         w=math.max(310,math.min(layer_size and layer_size.w or 408,W-110))
         h=math.max(360,math.min(layer_size and layer_size.h or 468,H-125))
@@ -1231,6 +1241,7 @@ function draw_editor_panel()
         x=W-w-22;y=58
     end
     local titles={brush="Brush",tools="Tool Select",color="Color",layer="Layer",
+        layer_advanced="Grupos e máscaras",
         back="Back",view="View Menu",grid_settings="Grid Settings",
         settings="Settings",selection="Selection Area",
         stabilizer="Stabilizer",shape="Shape",ruler="Ruler",material="Material",
@@ -1371,6 +1382,91 @@ function draw_editor_panel()
             "settings_grid_toggle")
         plain_button(bx,y+367,w-26,33,
             "Reset Grid",function() visual:reset_grid() end)
+    elseif name=="layer_advanced" then
+        paint:sync(state)
+        local group=paint:activeGroup(state)
+        local active=state:active_layer()
+        local layer=paint.doc.layers[paint.doc.sel]
+        local mode=paint:maskEditMode(state)
+        label('Camada: '..active.name,x+13,y+45,w-26,'small','left',C.white)
+        label('Grupo: '..(group and (group.name..'  ('..group.opacity..'%)') or 'nenhum'),
+            x+13,y+65,w-26,'small','left',C.soft)
+        local margin,gap=13,7
+        local full=w-margin*2
+        local half=(full-gap)/2
+        local third=(full-gap*2)/3
+        local function action(xx,yy,ww,txt,enabled,fn,key)
+            rectangle(xx,yy,ww,32,enabled and C.blue or C.panel_head,0.94,5)
+            label(txt,xx+3,yy+8,ww-6,'small','center',C.white)
+            hit(xx,yy,ww,32,function()
+                local ok,err=pcall(fn)
+                notice(ok and paint.status or ('Erro: '..tostring(err)))
+            end,key)
+        end
+        local tabs={{'Grupos','group'},{'Máscara camada','layer_mask'},
+            {'Máscara grupo','group_mask'}}
+        for i,entry in ipairs(tabs) do
+            local xx=x+margin+(i-1)*(third+gap)
+            rectangle(xx,y+95,third,33,
+                layer_advanced_tab==entry[2] and C.blue or C.deep,0.9,5)
+            label(entry[1],xx+2,y+105,third-4,'tiny','center',C.white)
+            local tab=entry[2]
+            hit(xx,y+95,third,33,function() layer_advanced_tab=tab end,
+                'advanced_tab_'..tab)
+        end
+        local function pair(row,a,b)
+            local yy=y+146+(row-1)*48
+            action(x+margin,yy,half,a[1],a[2],a[3],a[4])
+            action(x+margin+half+gap,yy,half,b[1],b[2],b[3],b[4])
+        end
+        if layer_advanced_tab=='group' then
+            pair(1,{'Grupo 1 camada',false,function()
+                paint:createGroup(state,false) end,'group_single'},
+                {'Grupo 2 camadas',false,function()
+                paint:createGroup(state,true) end,'group_pair'})
+            pair(2,{'Desagrupar',false,function()
+                paint:ungroup(state) end,'group_ungroup'},
+                {'Visível',group and group.visible,function()
+                paint:groupAction(state,'visible') end,'group_visible'})
+            pair(3,{'Opacidade -',false,function()
+                paint:groupAction(state,'opacityMinus') end,'group_opacity_minus'},
+                {'Opacidade +',false,function()
+                paint:groupAction(state,'opacityPlus') end,'group_opacity_plus'})
+            label('Grupo 2 camadas inclui a camada selecionada e a inferior.',
+                x+margin,y+301,full,'tiny','left',C.soft)
+        elseif layer_advanced_tab=='layer_mask' then
+            pair(1,{'Adicionar',false,function()
+                paint:layerMaskAction(state,'add') end,'layer_mask_add'},
+                {'Remover',false,function()
+                paint:layerMaskAction(state,'remove') end,'layer_mask_remove'})
+            pair(2,{'Ativar',layer.mask and layer.mask.enabled,function()
+                paint:layerMaskAction(state,'enabled') end,'layer_mask_enabled'},
+                {'Inverter',layer.mask and layer.mask.inverted,function()
+                paint:layerMaskAction(state,'inverted') end,'layer_mask_inverted'})
+            pair(3,{'Editar máscara',mode=='layer',function()
+                paint:editMask(state,'layer') end,'layer_mask_paint'},
+                {'Pintar pixels',not mode,function()
+                paint:editPixels() end,'layer_paint_pixels'})
+            label('A máscara da camada não apaga pixels originais.',
+                x+margin,y+301,full,'tiny','left',C.soft)
+        else
+            pair(1,{'Adicionar',false,function()
+                paint:groupAction(state,'addMask') end,'group_mask_add'},
+                {'Remover',false,function()
+                paint:groupAction(state,'removeMask') end,'group_mask_remove'})
+            pair(2,{'Ativar',group and group.mask and group.mask.enabled,function()
+                paint:groupAction(state,'maskEnabled') end,'group_mask_enabled'},
+                {'Inverter',group and group.mask and group.mask.inverted,function()
+                paint:groupAction(state,'maskInverted') end,'group_mask_inverted'})
+            pair(3,{'Editar máscara',mode=='group',function()
+                paint:editMask(state,'group') end,'group_mask_paint'},
+                {'Pintar pixels',not mode,function()
+                paint:editPixels() end,'group_paint_pixels'})
+            label('A máscara do grupo atua no resultado de seus filhos.',
+                x+margin,y+301,full,'tiny','left',C.soft)
+        end
+        label('Pincel revela; borracha esconde. Feche o painel para pintar.',
+            x+margin,y+h-24,full,'tiny','left',C.soft)
     elseif name=="layer" then
         hit(x+3,y+2,w-48,32,function()
             local mx,my=pointer()
@@ -1378,8 +1474,9 @@ function draw_editor_panel()
         end,"layer_drag")
         local bx=x+10
         rectangle(bx,y+43,w-53,37,C.light,0.20,2)
-        label("Selection Layer",bx+40,y+54,w-101,"small","left",C.white)
+        label("Grupos / Máscaras  >",bx+40,y+54,w-105,"small","left",C.white)
         rectangle(bx+7,y+48,25,25,C.white)
+        hit(bx,y+43,w-90,37,function() set_panel('layer_advanced') end,'layer_advanced')
         local max_rows=math.max(1,math.floor((h-269)/52))
         for slot=1,math.min(#state.layers,max_rows) do
             local index=#state.layers-slot+1
@@ -1395,7 +1492,13 @@ function draw_editor_panel()
             end end
             stroke(bx+4,yy+5,40,40,C.soft,0.7)
             label(tostring(index),bx+48,yy+4,30,"small","center",C.white)
-            label(layer.name,bx+79,yy+4,w-185,"tiny","left",C.white)
+            local docLayer=paint.doc and paint.byId[layer.id]
+            local gr=docLayer and docLayer.groupId and paint.doc.groups[docLayer.groupId]
+            local title=(gr and '[G] ' or '')..layer.name
+            label(title,bx+79,yy+4,w-185,"tiny","left",C.white)
+            if docLayer and docLayer.mask then
+                label('[M]',bx+50,yy+28,27,'tiny','center',C.white)
+            end
             label(tostring(layer.opacity).."%   "..layer.blending,
                 bx+79,yy+24,w-172,"small","left",C.white)
             local id=layer.id
@@ -2259,6 +2362,15 @@ function love.load()
             state:open_gallery();state:open_new_canvas();state:create_canvas(1000,1000)
         elseif smoke_screen=="editor" then
             state:open_gallery();state:open_new_canvas();state:create_canvas(1800,2400)
+        elseif smoke_screen=="layer_advanced" then
+            state:open_gallery();state:open_new_canvas();state:create_canvas(1280,960)
+            state:add_layer()
+            paint:sync(state)
+            assert(paint:createGroup(state,true))
+            assert(paint:groupAction(state,'addMask'))
+            assert(paint:layerMaskAction(state,'add'))
+            layer_advanced_tab='group_mask'
+            set_panel('layer_advanced')
         elseif smoke_screen=="layer" or smoke_screen=="color" or smoke_screen=="brush" then
             state:open_gallery();state:open_new_canvas();state:create_canvas(1800,2400)
             set_panel(smoke_screen)
@@ -3203,8 +3315,47 @@ function love.update()
         click_control("brush_reset")
         assert(state.brush_size==8 and opacity==100)
         e2e_stage=19
+    elseif e2e_stage==19 then
+        love.keypressed('escape')
+        e2e_stage=20
+    elseif e2e_stage==20 then
+        click_control('layer')
+        assert(panel=='layer','não reabriu Layer para teste avançado')
+        e2e_stage=21
+    elseif e2e_stage==21 then
+        click_control('layer_advanced')
+        assert(panel=='layer_advanced','painel Grupos e Máscaras não abriu')
+        e2e_stage=22
+    elseif e2e_stage==22 then
+        click_control('group_pair')
+        assert(paint.doc.layers[2].groupId~=nil,'Group Pair não alterou o motor')
+        e2e_stage=23
+    elseif e2e_stage==23 then
+        click_control('advanced_tab_layer_mask')
+        assert(layer_advanced_tab=='layer_mask','aba Máscara camada não abriu')
+        e2e_stage=24
+    elseif e2e_stage==24 then
+        click_control('layer_mask_add')
+        assert(paint.doc.layers[2].mask,'botão Add Mask não criou máscara real')
+        e2e_stage=25
+    elseif e2e_stage==25 then
+        click_control('layer_mask_paint')
+        assert(paint:maskEditMode(state)=='layer','Editar máscara não ativou pincel')
+        e2e_stage=26
+    elseif e2e_stage==26 then
+        click_control('advanced_tab_group_mask')
+        e2e_stage=27
+    elseif e2e_stage==27 then
+        click_control('group_mask_add')
+        local g=paint:activeGroup(state)
+        assert(g and g.mask,'botão Group Mask não criou máscara real')
+        e2e_stage=28
+    elseif e2e_stage==28 then
+        click_control('group_mask_paint')
+        assert(paint:maskEditMode(state)=='group','Editar máscara grupo não ativou')
+        e2e_stage=29
     else
-        print("PASS: UI LÖVE E2E (gallery, layers, View, brush search and sliders)")
+        print("PASS: UI LÖVE E2E (gallery, layers, selection, masks/groups and brush)")
         love.event.quit(0)
     end
 end
