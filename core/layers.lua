@@ -40,6 +40,46 @@ function L.delete(doc)
   return true
 end
 
+-- Reorganização atômica: antes de registrar histórico, verifica a ordem
+-- proposta. Camadas não podem romper grupos, hierarquias ou clipping.
+-- Uma tentativa inválida deixa pixels, ordem, seleção e histórico intactos.
+function L.move(doc, from, to)
+  assert(type(from)=='number' and from==math.floor(from)
+    and from>=1 and from<=#doc.layers,'origem inválida')
+  assert(type(to)=='number' and to==math.floor(to)
+    and to>=1 and to<=#doc.layers,'destino inválido')
+  if from==to then return false,'camada já está nessa posição' end
+  if doc.layers[from].groupId~=doc.layers[to].groupId then
+    return false,'camadas devem pertencer ao mesmo grupo; use Mover grupo'
+  end
+  local ordered={}
+  for i,layer in ipairs(doc.layers) do ordered[i]=layer end
+  local moving=table.remove(ordered,from)
+  table.insert(ordered,to,moving)
+  local Groups=require('core.groups')
+  local ok,err=pcall(Groups.validate,{layers=ordered,groups=doc.groups})
+  if not ok then return false,err end
+  local function clipBases(layers)
+    local bases,group,base={}
+    for _,layer in ipairs(layers) do
+      if group~=layer.groupId then group=layer.groupId;base=nil end
+      if layer.clipped then bases[layer]=base else base=layer end
+    end
+    return bases
+  end
+  local before,after=clipBases(doc.layers),clipBases(ordered)
+  for layer,base in pairs(before) do
+    if after[layer]~=base then return false,'movimento alteraria a base de recorte' end
+  end
+  local active=doc.layers[doc.sel]
+  H.recordStructure(doc)
+  doc.layers=ordered
+  for i,layer in ipairs(ordered) do
+    if layer==active then doc.sel=i;break end
+  end
+  return true
+end
+
 function L.setVisible(doc, i, visible)
   H.recordStructure(doc)
   doc.layers[i].visible = visible and true or false

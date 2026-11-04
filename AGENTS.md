@@ -18,3 +18,6 @@
 
 - v0.25: painel `layer_advanced` com 3 abas; `Bridge:layerMaskAction`, `Bridge:groupAction`, `Bridge:editMask` etc. reutilizam APIs existentes de `core.layers`, `core.groups` e `core.stroke`. O modo de máscara não deve modificar os pixels RGBA, e a UI deve manter coerência após undo/redo e load.
 - Execute `texlua tests/test_core.lua` (969 verificações simuladas) e CI LÖVE 11.5. Nova camada no fim da pilha herda groupId quando aplicável. Veja `docs/GRUPOS_MASCARAS_v025.md`.
+
+## Atualização v0.26
+Miniaturas reais de camadas/máscaras com cache de revisões (`core/thumbnail.lua`), ordenação de camadas atômica (`core/layers.lua`) e movimentação de grupos inteiros entre irmãos (`core/groups.lua`). O painel Layer suporta scroll, ↑/↓ e arraste de linhas visíveis; o painel avançado tem ↑/↓ de grupos. Sem alterar NPNT5. Movimentos inválidos são bloqueados, histórico e IDs permanecem corretos. Próximos trabalhos: miniatura composta de grupos, scroll/drag refinados e desempenho no Windows.

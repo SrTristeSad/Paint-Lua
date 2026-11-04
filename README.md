@@ -24,13 +24,23 @@ Clone alternativo: git clone https://github.com/SrTristeSad/Paint-Lua.git (sem -
 
 A UI disponibiliza tela inicial, galeria, New Canvas, ferramentas, janelas de pincel, cores e camadas. O motor é responsável por pixels reais: **pintura, borracha, balde cooperativo, conta-gotas, Alpha Lock durante a sessão, camadas, recorte, desfazer/refazer e salvar/reabrir .npnt**. Zoom, rotação e pan usam a UI. Vários controles de filtros e galeria **ainda são demonstrativos ou parcialmente integrados**. A v0.25 conecta máscaras de camada e grupo, além de criar/desagrupar grupos, ao núcleo real. Não se deve assumir que um botão que existe na interface altera pixels.
 
-A bateria do núcleo foi incorporada ao repositório na v0.23: **969 testes aprovados em texlua com mocks**, incluindo seleção, laço e NPNT5. A integração do editor também é verificada em LÖVE 11.5 real em Linux com display virtual. A integração básica passou em **LÖVE 11.5 real em Linux sob display virtual**, incluindo pincel, undo/redo e NPNT. Ainda são necessários testes manuais no Windows, desempenho e uso de caneta/tablet.
+A bateria do núcleo foi incorporada ao repositório na v0.23: **1.008 testes aprovados em texlua com mocks na v0.26**, incluindo seleção, laço e NPNT5. A integração do editor também é verificada em LÖVE 11.5 real em Linux com display virtual. A integração básica passou em **LÖVE 11.5 real em Linux sob display virtual**, incluindo pincel, undo/redo e NPNT. Ainda são necessários testes manuais no Windows, desempenho e uso de caneta/tablet.
+
+## Miniaturas e ordenação v0.26
+
+O painel **Layer** agora apresenta **miniaturas reais** (40×40) amostradas dos pixels de cada camada, e uma miniatura de máscara (19×19) quando ela existe. As imagens mantêm a proporção do documento e são armazenadas em cache; são reconstruídas quando mudam tiles, máscaras ou após desfazer/refazer. A aba avançada exibe uma prévia da camada ou da máscara selecionada.
+
+**Reordenar camadas:** selecione uma camada e use os botões **↑ / ↓** no topo da lista, ou arraste sua linha até outra linha visível. A lista aceita rolagem do mouse para visualizar camadas adicionais. Cada movimento é uma única operação de desfazer/refazer. A operação é recusada se dividir grupos, cruzar limites de grupo ou alterar a base de um clipping.
+
+**Reordenar grupos:** no painel **Grupos / Máscaras → Grupos**, use **Subir grupo / Descer grupo**. Todo o grupo e os descendentes são deslocados como um bloco entre irmãos compatíveis, preservando os tiles, máscaras e a hierarquia. Movimentos inválidos são recusados sem alterar o histórico. A ordem é salva no arquivo NPNT5.
+
+**Limites:** as miniaturas usam amostragem nearest-neighbor (traços de menos de um pixel na prévia podem não aparecer). Não há ainda miniaturas compósitas dos grupos, arraste livre entre grupos, nem rearranjo do clipping como um bloco. O LÖVE no Windows ainda precisa ser validado manualmente. [Detalhes e testes da v0.26](docs/MINIATURAS_CAMADAS_v026.md).
 
 ## Grupos e máscaras v0.25
 
 O painel **Layer → Grupos / Máscaras >** agora oferece três abas adaptáveis a janelas menores: **Grupos**, **Máscara camada** e **Máscara grupo**. É possível criar grupos de uma camada ou de duas camadas adjacentes, desfazer o grupo, alternar visibilidade e controlar opacidade em passos de 10%. Ao adicionar nova camada no fim da pilha, ela herda o grupo da anterior.
 
-As máscaras são **não destrutivas**: adicionar, remover, ativar/desativar, inverter e pintar com pincel/borracha usam as APIs reais do núcleo, com histórico e salvamento `.npnt` (NPNT5). No modo de edição, pincel revela e borracha esconde; **Pintar pixels** volta à imagem original. Os avisos `[G]` e `[M]` aparecem ao lado das camadas, mas as miniaturas continuam demonstrativas. [Instruções, limites e testes](docs/GRUPOS_MASCARAS_v025.md).
+As máscaras são **não destrutivas**: adicionar, remover, ativar/desativar, inverter e pintar com pincel/borracha usam as APIs reais do núcleo, com histórico e salvamento `.npnt` (NPNT5). No modo de edição, pincel revela e borracha esconde; **Pintar pixels** volta à imagem original. Os marcadores de grupos aparecem junto às camadas; a v0.26 acrescenta miniaturas reais das camadas e máscaras. [Instruções, limites e testes](docs/GRUPOS_MASCARAS_v025.md).
 
 **Limitações:** não há ainda controle de grupos por arraste livre, thumbnails reais de máscaras, feather ou operação em lote de várias camadas. A interface não é uma cópia do ibisPaint oficial e funcionalidades não conectadas continuam demonstrativas.
 
@@ -67,7 +77,7 @@ O **NPNT5** preserva o laço e a máscara da varinha ao salvar e abrir; projetos
 - **Conta-gotas:** amostra a cor composta dos pixels do desenho e atualiza o seletor de cores da interface.
 - **Alpha Lock:** o pincel muda somente a cor dos pixels já opacos, sem criar novos pixels transparentes. A borracha não altera o alfa quando a trava está ativa.
 - **Camadas:** visibilidade, clipping e blending alteram a composição real e entram no histórico; o slider de opacidade não cria centenas de entradas de undo. Desfazer/refazer atualiza também o estado do painel.
-- **Limites conhecidos:** Alpha Lock e a flag de camada bloqueada ainda são estados da interface, **não persistem em .npnt**; o balde é bloqueado quando Alpha Lock está ligado. Os thumbnails das camadas e as amostras de pincéis continuam ilustrativos. Não há testes de FPS/tablet/Windows nem paridade de Alpha Lock no caminho FFI; nesse modo o pincel usa o caminho Lua.
+- **Limites conhecidos:** Alpha Lock e a flag de camada bloqueada ainda são estados da interface, **não persistem em .npnt**; o balde é bloqueado quando Alpha Lock está ligado. As amostras de pincéis continuam ilustrativas; as miniaturas de camadas são reais desde a v0.26. Não há testes de FPS/tablet/Windows nem paridade de Alpha Lock no caminho FFI; nesse modo o pincel usa o caminho Lua.
 
 ## Créditos e continuidade
 

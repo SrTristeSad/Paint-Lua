@@ -53,6 +53,8 @@ local current_width, current_height = "1000", "1000"
 local focus, opacity, size_zoom = nil, 100, 100
 local input_replace = true
 local layer_press = nil
+-- Lista com rolagem e drag-and-drop; IDs (não índices) sobrevivem à reordenação.
+local layer_scroll, layer_row_drag, layer_row_targets = 0, nil, {}
 local layer_position, layer_size, drag_layer, drag_layer_resize, drag_opacity = nil, nil, nil, nil, nil
 local layer_blend_open = false
 local layer_advanced_tab = 'group'
@@ -66,6 +68,8 @@ local toast, toast_until = nil, 0
 local smoke = os.getenv("PAINT_LUA_SMOKE") == "1"
 local e2e = os.getenv("PAINT_LUA_E2E") == "1"
 local e2e_stage = 0
+local layer_e2e = os.getenv('PAINT_LUA_LAYER_E2E') == '1'
+local layer_e2e_stage = 0
 local gallery_e2e = os.getenv("PAINT_LUA_GALLERY_E2E") == "1"
 local gallery_e2e_stage = 0
 local smoke_screen = os.getenv("PAINT_LUA_SCREEN") or "title"
@@ -1388,7 +1392,15 @@ function draw_editor_panel()
         local active=state:active_layer()
         local layer=paint.doc.layers[paint.doc.sel]
         local mode=paint:maskEditMode(state)
-        label('Camada: '..active.name,x+13,y+45,w-26,'small','left',C.white)
+        label('Camada: '..active.name,x+13,y+45,w-75,'small','left',C.white)
+        local advancedThumbKind=layer_advanced_tab=='group_mask' and 'group_mask'
+            or layer_advanced_tab=='layer_mask' and 'mask' or 'layer'
+        local advancedThumb=paint:thumbnail(state,active.id,advancedThumbKind,36,36)
+        if advancedThumb then
+            rectangle(x+w-51,y+43,36,36,C.white,0.45,2)
+            rgba(C.white)
+            love.graphics.draw(advancedThumb,x+w-51,y+43)
+        end
         label('Grupo: '..(group and (group.name..'  ('..group.opacity..'%)') or 'nenhum'),
             x+13,y+65,w-26,'small','left',C.soft)
         local margin,gap=13,7
@@ -1432,8 +1444,12 @@ function draw_editor_panel()
                 paint:groupAction(state,'opacityMinus') end,'group_opacity_minus'},
                 {'Opacidade +',false,function()
                 paint:groupAction(state,'opacityPlus') end,'group_opacity_plus'})
-            label('Grupo 2 camadas inclui a camada selecionada e a inferior.',
-                x+margin,y+301,full,'tiny','left',C.soft)
+            pair(4,{'Subir grupo',false,function()
+                paint:moveGroup(state,1) end,'group_move_up'},
+                {'Descer grupo',false,function()
+                paint:moveGroup(state,-1) end,'group_move_down'})
+            label('Movimento inclui todas as camadas e subgrupos.',
+                x+margin,y+337,full,'tiny','left',C.soft)
         elseif layer_advanced_tab=='layer_mask' then
             pair(1,{'Adicionar',false,function()
                 paint:layerMaskAction(state,'add') end,'layer_mask_add'},
@@ -1473,37 +1489,69 @@ function draw_editor_panel()
             drag_layer={dx=mx-x,dy=my-y}
         end,"layer_drag")
         local bx=x+10
-        rectangle(bx,y+43,w-53,37,C.light,0.20,2)
-        label("Grupos / Máscaras  >",bx+40,y+54,w-105,"small","left",C.white)
-        rectangle(bx+7,y+48,25,25,C.white)
-        hit(bx,y+43,w-90,37,function() set_panel('layer_advanced') end,'layer_advanced')
+        rectangle(bx,y+43,w-126,37,C.light,0.20,2)
+        label("Grupos / Máscaras  >",bx+13,y+54,w-145,"small","left",C.white)
+        hit(bx,y+43,w-126,37,function() set_panel('layer_advanced') end,'layer_advanced')
+        local function moveButton(xx,text,dir,key)
+            rectangle(xx,y+45,30,32,C.panel_head,0.97,5)
+            label(text,xx,y+53,30,'small','center',C.white)
+            hit(xx,y+45,30,32,function()
+                paint:moveLayer(state,dir)
+                notice(paint.status)
+            end,key)
+        end
+        moveButton(x+w-107,'↑',1,'layer_move_up')
+        moveButton(x+w-73,'↓',-1,'layer_move_down')
         local max_rows=math.max(1,math.floor((h-269)/52))
-        for slot=1,math.min(#state.layers,max_rows) do
-            local index=#state.layers-slot+1
+        layer_scroll=math.max(0,math.min(layer_scroll,math.max(0,#state.layers-max_rows)))
+        layer_row_targets={}
+        for slot=1,math.min(#state.layers-layer_scroll,max_rows) do
+            local index=#state.layers-slot+1-layer_scroll
             local layer=state.layers[index]
             local yy=y+85+(slot-1)*52
             local active=layer.id==state.active_layer_id
             rectangle(bx,yy,w-53,50,
                 active and C.blue or C.light,active and 0.72 or 0.15,2)
-            -- Miniaturas de camadas demonstrativas: pintura real aparece no canvas.
+            -- Miniatura real da camada ativa, centrada e preservando proporção.
+            -- O quadriculado é APENAS o fundo da transparência.
             for i=0,3 do for j=0,3 do
                 local v=(i+j)%2==0 and 0.87 or 0.65
                 rectangle(bx+4+i*10,yy+5+j*10,10,10,{v,v,v})
             end end
+            local thumb=paint:thumbnail(state,layer.id,'layer',40,40)
+            if thumb then
+                rgba(C.white)
+                love.graphics.draw(thumb,bx+4,yy+5)
+            end
             stroke(bx+4,yy+5,40,40,C.soft,0.7)
+            layer_row_targets[#layer_row_targets+1]={id=layer.id,x=bx,y=yy,w=w-98,h=50}
+            if layer_row_drag and layer_row_drag.moved and
+                layer_row_drag.targetId==layer.id and
+                layer_row_drag.id~=layer.id then
+                stroke(bx+2,yy+1,w-102,48,C.accent,1)
+            end
             label(tostring(index),bx+48,yy+4,30,"small","center",C.white)
             local docLayer=paint.doc and paint.byId[layer.id]
             local gr=docLayer and docLayer.groupId and paint.doc.groups[docLayer.groupId]
             local title=(gr and '[G] ' or '')..layer.name
             label(title,bx+79,yy+4,w-185,"tiny","left",C.white)
             if docLayer and docLayer.mask then
-                label('[M]',bx+50,yy+28,27,'tiny','center',C.white)
+                local maskThumb=paint:thumbnail(state,layer.id,'mask',19,19)
+                if maskThumb then
+                    rectangle(bx+50,yy+27,19,19,C.deep,1,1)
+                    rgba(C.white)
+                    love.graphics.draw(maskThumb,bx+50,yy+27)
+                    stroke(bx+50,yy+27,19,19,C.soft,0.8)
+                end
             end
             label(tostring(layer.opacity).."%   "..layer.blending,
                 bx+79,yy+24,w-172,"small","left",C.white)
             local id=layer.id
-            hit(bx,yy,w-98,50,function() state:select_layer(id) end,
-                "select_layer")
+            hit(bx,yy,w-98,50,function()
+                state:select_layer(id)
+                local mx,my=pointer()
+                layer_row_drag={id=id,startX=mx,startY=my,moved=false,targetId=nil}
+            end,"select_layer")
             glyph("eye",x+w-29,yy+25,12)
             hit(x+w-48,yy+3,41,44,function()
                 layer_press={id=id,started=love.timer.getTime()}
@@ -2412,6 +2460,12 @@ function love.load()
         end
         capture_requested=true
     end
+    if layer_e2e then
+        state:open_gallery();state:open_new_canvas();state:create_canvas(96,64)
+        state:add_layer();state:add_layer()
+        paint:sync(state)
+        set_panel('layer')
+    end
 end
 
 function love.draw()
@@ -2437,6 +2491,7 @@ end
 function love.mousepressed(rx,ry,button)
     if button~=1 then return end
     layer_press=nil
+    layer_row_drag=nil
     local x,y=rx/scale,ry/scale
     for i=#controls,1,-1 do
         local b=controls[i]
@@ -2502,6 +2557,21 @@ function love.mousemoved(rx,ry,dx,dy)
                 math.floor(fraction*1000+0.5)/10))
         else opacity=math.floor(fraction*100+0.5) end
     end
+    if layer_row_drag and panel=='layer' then
+        local d=layer_row_drag
+        local xx,yy=rx/scale,ry/scale
+        if (xx-d.startX)^2+(yy-d.startY)^2>=8*8 then d.moved=true end
+        if d.moved then
+            d.targetId=nil
+            for _,rect in ipairs(layer_row_targets) do
+                if xx>=rect.x and xx<=rect.x+rect.w
+                    and yy>=rect.y and yy<=rect.y+rect.h then
+                    d.targetId=rect.id
+                    break
+                end
+            end
+        end
+    end
     if drag_layer and panel=="layer" then
         layer_position={x=rx/scale-drag_layer.dx,y=ry/scale-drag_layer.dy}
     end
@@ -2537,6 +2607,15 @@ function love.mousemoved(rx,ry,dx,dy)
 end
 function love.mousereleased(rx,ry,button)
     if button~=1 then return end
+    if layer_row_drag then
+        local drag=layer_row_drag
+        layer_row_drag=nil
+        if drag.moved and drag.targetId and drag.targetId~=drag.id
+            and state.screen=='editor' and panel=='layer' then
+            paint:reorderLayer(state,drag.id,drag.targetId)
+            notice(paint.status)
+        end
+    end
     paint:finishTransformDrag()
     paint:finish(false)
     if paint.selectionDrag then
@@ -2586,6 +2665,11 @@ function love.wheelmoved(dx,dy)
         local last=80+128+#presets*row_h
         gallery_scroll=math.max(0,math.min(
             math.max(0,last-(H-42)+6),gallery_scroll-dy*28))
+    elseif state.screen=='editor' and panel=='layer' then
+        local hh=layer_size and layer_size.h or 468
+        local visible=math.max(1,math.floor((hh-269)/52))
+        layer_scroll=math.max(0,math.min(math.max(0,#state.layers-visible),
+            layer_scroll-math.floor(dy*1.5+(dy>=0 and 0.5 or -0.5))))
     elseif state.screen=="editor" and panel=="brush" then
         local entries=brush_tab=="Basic" and BrushCatalog.search(brush_search) or {}
         local bw=math.min(565,W-math.min(185,math.max(66,W*0.16))-34)
@@ -3175,6 +3259,48 @@ function love.update()
     end
     if gallery_e2e and #controls>0 then
         gallery_e2e_update()
+        return
+    end
+    if layer_e2e and #controls>0 then
+        if layer_e2e_stage==0 then
+            -- Arraste pela interface visível, sem chamar Layers.move diretamente.
+            local rows={}
+            for _,ctrl in ipairs(controls) do
+                if ctrl.key=='select_layer' then rows[#rows+1]=ctrl end
+            end
+            table.sort(rows,function(a,b) return a.y<b.y end)
+            assert(#rows==3,'UI v0.26: três linhas de camada esperadas')
+            local src,dst=rows[1],rows[3]
+            local x=(src.x+src.w/2)*scale
+            local y=(src.y+src.h/2)*scale
+            local tx=(dst.x+dst.w/2)*scale
+            local ty=(dst.y+dst.h/2)*scale
+            local activeId=state.layers[3].id
+            love.mouse.setPosition(x,y)
+            love.mousepressed(x,y,1)
+            love.mouse.setPosition(tx,ty)
+            love.mousemoved(tx,ty,tx-x,ty-y)
+            love.mousereleased(tx,ty,1)
+            assert(state.layers[1].id==activeId,
+                'UI v0.26: drag-and-drop não alterou ordem real')
+            assert(#paint.doc.history.undo==1,'UI v0.26: drag deve gerar um undo')
+            layer_e2e_stage=1
+        elseif layer_e2e_stage==1 then
+            local activeId=state.active_layer_id
+            click_control('layer_move_up')
+            assert(state.layers[2].id==activeId,
+                'UI v0.26: botão de subir camada não moveu')
+            layer_e2e_stage=2
+        elseif layer_e2e_stage==2 then
+            state:add_layer()
+            love.wheelmoved(0,-1)
+            assert(layer_scroll>0,'UI v0.26: rolagem não mudou a lista')
+            assert(#state.layers==4,'UI v0.26: adicionar camada falhou')
+            layer_e2e_stage=3
+        else
+            print('PASS: UI LÖVE v0.26: drag/drop, setas e scroll de camadas')
+            love.event.quit(0)
+        end
         return
     end
     if not e2e or #controls==0 then return end

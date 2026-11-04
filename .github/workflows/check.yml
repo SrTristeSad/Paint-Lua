@@ -1,7 +1,7 @@
-name: Paint-Lua v0.25 — grupos, máscaras e pacote Windows
+name: Paint-Lua v0.26 — miniaturas reais e ordenação de camadas
 on:
   push:
-    branches: [main, feature/paint-v025-groups]
+    branches: [main, feature/paint-v026-thumbnails]
   pull_request:
 jobs:
   checks:
@@ -18,6 +18,7 @@ jobs:
           test -f core/doc.lua
           test -f core/selection.lua
           test -f core/transform.lua
+          test -f core/thumbnail.lua
           test -f tests/test_core.lua
           test -f assets/icons/png/paintbrush.png
           test ! -f .gitmodules
@@ -26,7 +27,7 @@ jobs:
         run: |
           lua5.4 tests/test_core.lua > core-results.log
           tail -n 5 core-results.log
-          grep -Eq '969 passou, 0 falhou' core-results.log
+          grep -Eq '1008 passou, 0 falhou' core-results.log
       - name: Testes do modelo e navegação
         run: |
           lua5.4 scripts/smoke-core.lua
@@ -43,21 +44,24 @@ jobs:
         run: timeout 60s xvfb-run -a env PAINT_LUA_BRIDGE_E2E=1 love .
       - name: E2E de navegação e botões reais no LÖVE
         run: timeout 75s xvfb-run -a env PAINT_LUA_E2E=1 love .
+      - name: E2E de arraste, setas e rolagem do painel Layer
+        run: timeout 60s xvfb-run -a env PAINT_LUA_LAYER_E2E=1 love .
       - name: Inspecionar janela avançada no LÖVE
         run: timeout 60s xvfb-run -a env PAINT_LUA_SMOKE=1 PAINT_LUA_SCREEN=layer_advanced love .
       - name: Empacotar fontes e .bat para Windows
         shell: bash
         run: |
-          git archive --format=zip --output=Paint-Lua-v0.25-Windows.zip HEAD
-          unzip -tq Paint-Lua-v0.25-Windows.zip
-          unzip -Z1 Paint-Lua-v0.25-Windows.zip | grep -q '^core/selection.lua$'
-          unzip -Z1 Paint-Lua-v0.25-Windows.zip | grep -q '^core/transform.lua$'
-          unzip -Z1 Paint-Lua-v0.25-Windows.zip | grep -q '^tests/test_core.lua$'
-          unzip -Z1 Paint-Lua-v0.25-Windows.zip | grep -q '^testar.bat$'
-          sha256sum Paint-Lua-v0.25-Windows.zip
+          git archive --format=zip --output=Paint-Lua-v0.26-Windows.zip HEAD
+          unzip -tq Paint-Lua-v0.26-Windows.zip
+          unzip -Z1 Paint-Lua-v0.26-Windows.zip | grep -q '^core/selection.lua$'
+          unzip -Z1 Paint-Lua-v0.26-Windows.zip | grep -q '^core/transform.lua$'
+          unzip -Z1 Paint-Lua-v0.26-Windows.zip | grep -q '^core/thumbnail.lua$'
+          unzip -Z1 Paint-Lua-v0.26-Windows.zip | grep -q '^tests/test_core.lua$'
+          unzip -Z1 Paint-Lua-v0.26-Windows.zip | grep -q '^testar.bat$'
+          sha256sum Paint-Lua-v0.26-Windows.zip
       - name: Disponibilizar ZIP
         uses: actions/upload-artifact@v4
         with:
-          name: Paint-Lua-v0.25-Windows
-          path: Paint-Lua-v0.25-Windows.zip
+          name: Paint-Lua-v0.26-Windows
+          path: Paint-Lua-v0.26-Windows.zip
           if-no-files-found: error

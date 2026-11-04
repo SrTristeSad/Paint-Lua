@@ -146,6 +146,84 @@ function G.ungroup(doc,id)
   return true
 end
 
+-- Move um grupo inteiro, com todos os seus descendentes, sobre o próximo
+-- irmão (camada solta ou outro grupo). Nunca quebra contiguidade ou clipping.
+function G.move(doc,id,direction)
+  local group=get(doc,id)
+  assert(direction==1 or direction==-1,'direção de grupo inválida')
+  local function subtreeContains(layer,ancestor)
+    if not layer.groupId then return false end
+    local path=G.path(doc,layer.groupId)
+    for _,part in ipairs(path) do if part==ancestor then return true end end
+    return false
+  end
+  local first,last
+  for i,layer in ipairs(doc.layers) do
+    if subtreeContains(layer,id) then
+      first=first or i
+      last=i
+    end
+  end
+  assert(first,'grupo vazio')
+  local adjacent=direction==1 and last+1 or first-1
+  if not doc.layers[adjacent] then return false,'grupo no limite da pilha' end
+
+  local parentPath=G.path(doc,group.parentId)
+  local neighborPath=G.path(doc,doc.layers[adjacent].groupId)
+  for i,part in ipairs(parentPath) do
+    if neighborPath[i]~=part then return false,'grupos não são irmãos' end
+  end
+  local nextSibling=neighborPath[#parentPath+1]
+  if nextSibling==id then return false,'grupo já está nessa posição' end
+  local nfirst,nlast=adjacent,adjacent
+  if nextSibling then
+    if not doc.groups[nextSibling]
+      or doc.groups[nextSibling].parentId~=group.parentId then
+      return false,'destino não é irmão do grupo'
+    end
+    while nfirst>1 and subtreeContains(doc.layers[nfirst-1],nextSibling) do
+      nfirst=nfirst-1
+    end
+    while nlast<#doc.layers and subtreeContains(doc.layers[nlast+1],nextSibling) do
+      nlast=nlast+1
+    end
+  end
+  if direction==1 and nfirst~=last+1 or
+     direction==-1 and nlast~=first-1 then
+    return false,'grupos não são adjacentes'
+  end
+  local ordered={}
+  local function append(a,b)
+    for i=a,b do ordered[#ordered+1]=doc.layers[i] end
+  end
+  if direction==1 then
+    append(1,first-1);append(nfirst,nlast);append(first,last)
+    append(nlast+1,#doc.layers)
+  else
+    append(1,nfirst-1);append(first,last);append(nfirst,nlast)
+    append(last+1,#doc.layers)
+  end
+  local ok,err=pcall(G.validate,{layers=ordered,groups=doc.groups})
+  if not ok then return false,err end
+  local function clipBases(layers)
+    local bases,group,base={}
+    for _,layer in ipairs(layers) do
+      if group~=layer.groupId then group=layer.groupId;base=nil end
+      if layer.clipped then bases[layer]=base else base=layer end
+    end
+    return bases
+  end
+  local before,after=clipBases(doc.layers),clipBases(ordered)
+  for layer,base in pairs(before) do
+    if after[layer]~=base then return false,'movimento alteraria a base de recorte' end
+  end
+  local active=doc.layers[doc.sel]
+  Hist.recordStructure(doc)
+  doc.layers=ordered
+  for i,layer in ipairs(ordered) do if layer==active then doc.sel=i;break end end
+  return true
+end
+
 local function update(doc,id,field,value)
   local g=get(doc,id)
   if g[field]==value then return false end

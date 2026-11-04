@@ -30,3 +30,6 @@ em outras camadas e melhorias de fluxo na UI; somente conforme pedido do criador
 ## Estado adicional: v0.25
 
 A ponte passou a integrar as APIs reais de máscaras (`core.layers`/`core.mask`), grupos hierárquicos (`core.groups`) e pinceladas em máscaras (`core.stroke`). O painel Layer abre a janela Grupos / Máscaras com três abas. Grupo pode conter uma camada ou a atual + inferior; a camada nova no topo de um grupo herda seu ID. O modo editar máscara usa B (revelar) e E (ocultar), preservando o RGBA original. As mudanças entram no histórico e persistem em NPNT5. Consulte `docs/GRUPOS_MASCARAS_v025.md`. A bateria simulada passou em 969 verificações, sem falhas. Testar no Windows e aferir FPS continuam pendentes. Os próximos candidatos são miniaturas reais, reordenação de camadas/grupos e feather/transformação suave.
+
+## Atualização v0.26
+Miniaturas reais de camadas/máscaras com cache de revisões (`core/thumbnail.lua`), ordenação de camadas atômica (`core/layers.lua`) e movimentação de grupos inteiros entre irmãos (`core/groups.lua`). O painel Layer suporta scroll, ↑/↓ e arraste de linhas visíveis; o painel avançado tem ↑/↓ de grupos. Sem alterar NPNT5. Movimentos inválidos são bloqueados, histórico e IDs permanecem corretos. Próximos trabalhos: miniatura composta de grupos, scroll/drag refinados e desempenho no Windows.

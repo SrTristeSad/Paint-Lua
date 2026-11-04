@@ -11,6 +11,7 @@ local Selection = require('core.selection')
 local Transform = require('core.transform')
 local Layers = require('core.layers')
 local Groups = require('core.groups')
+local Thumbnail = require('core.thumbnail')
 
 local Bridge = {}
 Bridge.__index = Bridge
@@ -32,8 +33,9 @@ end
 function Bridge.new()
   return setmetatable({doc=nil,modelDocument=nil,byId={},uiByLayer={},
     stroke=nil,job=nil,jobKind=nil,selectionDrag=nil,transform=nil,transformDrag=nil,
-    cache=nil,gpu={},maskMode=nil,maskOwner=nil,
-    filename='meu-desenho.npnt',status='Paint-Lua v0.25 pronto'},Bridge)
+    cache=nil,gpu={},thumbCache=setmetatable({}, {__mode='k'}),
+    thumbRenders=0,maskMode=nil,maskOwner=nil,
+    filename='meu-desenho.npnt',status='Paint-Lua v0.26 pronto'},Bridge)
 end
 
 function Bridge:dropImages()
@@ -41,6 +43,12 @@ function Bridge:dropImages()
     if image.release then image:release() end
   end
   self.gpu={}
+  for _,entry in pairs(self.thumbCache or {}) do
+    for _,thumb in pairs(entry) do
+      if thumb.image and thumb.image.release then thumb.image:release() end
+    end
+  end
+  self.thumbCache=setmetatable({}, {__mode='k'})
   if self.cache then self.cache:clear() end
   self.cache=nil
 end
@@ -151,6 +159,89 @@ function Bridge:refreshModel(model)
   model.solo_layer_id=nil
   model.solo_before=nil
   self.byId=nextMap
+end
+
+-- Renderiza apenas 40x40 pixels da fonte real (e não quadriculados falsos).
+-- A cache usa identidade + revisões, inclusive de máscaras e undo/redo.
+function Bridge:thumbnail(model, layerId, kind, width, height)
+  if not self.doc then return nil end
+  width,height=width or 40,height or 40
+  kind=kind or 'layer'
+  local layer=self.byId[layerId]
+  if not layer then return nil end
+  local owner=layer
+  if kind=='group_mask' then
+    owner=layer.groupId and self.doc.groups[layer.groupId]
+    kind='mask'
+  end
+  if not owner or (kind=='mask' and not owner.mask) then return nil end
+  local key=kind..':'..width..'x'..height
+  local records=self.thumbCache[owner]
+  if not records then records={};self.thumbCache[owner]=records end
+  local sig=Thumbnail.signature(self.doc,owner,kind,width,height)
+  local rec=records[key]
+  if rec and Thumbnail.same(rec.signature,sig) then return rec.image end
+  local pixels=Thumbnail.render(self.doc,owner,kind,width,height)
+  local image=rec and rec.image
+  if image and image.replacePixels then
+    image:replacePixels(pixels)
+  else
+    image=love.graphics.newImage(pixels)
+    if image.setFilter then image:setFilter('linear','linear') end
+  end
+  records[key]={image=image,signature=sig}
+  self.thumbRenders=self.thumbRenders+1
+  return image
+end
+
+-- Reordenar é uma única operação de histórico. IDs da interface continuam
+-- ligados às mesmas ImageData, inclusive após desfazer/refazer.
+function Bridge:reorderLayer(model, sourceId, targetId)
+  local doc=self:canEditStructure(model)
+  if not doc then return false end
+  local from,to
+  for i,entry in ipairs(model.layers) do
+    if entry.id==sourceId then from=i end
+    if entry.id==targetId then to=i end
+  end
+  if not from or not to then self.status='Camada para mover não encontrada';return false end
+  local ok,changed,err=pcall(Layers.move,doc,from,to)
+  if not ok or not changed then
+    self.status=ok and ('Movimento recusado: '..tostring(err)) or
+      ('Movimento inválido: '..tostring(changed))
+    return false
+  end
+  self:refreshModel(model)
+  self.status='Camada movida (Ctrl+Z desfaz)'
+  return true
+end
+
+function Bridge:moveLayer(model,direction)
+  assert(direction==1 or direction==-1,'direção de camada inválida')
+  local i
+  for n,entry in ipairs(model.layers) do
+    if entry.id==model.active_layer_id then i=n;break end
+  end
+  if not i or not model.layers[i+direction] then
+    self.status='Camada no limite da pilha';return false
+  end
+  return self:reorderLayer(model,model.active_layer_id,model.layers[i+direction].id)
+end
+
+function Bridge:moveGroup(model,direction)
+  local doc=self:canEditStructure(model)
+  if not doc then return false end
+  local group=self:activeGroup(model)
+  if not group then self.status='Selecione uma camada do grupo';return false end
+  local ok,changed,err=pcall(Groups.move,doc,group.id,direction)
+  if not ok or not changed then
+    self.status=ok and ('Movimento recusado: '..tostring(err)) or
+      ('Movimento inválido: '..tostring(changed))
+    return false
+  end
+  self:refreshModel(model)
+  self.status='Grupo movido com seus membros (Ctrl+Z desfaz)'
+  return true
 end
 
 -- Controles avançados do painel Layer. Mutacoes de mascara/grupo usam
