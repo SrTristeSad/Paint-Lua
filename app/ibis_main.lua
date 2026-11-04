@@ -8,6 +8,7 @@ local Viewport = require("src.viewport")
 local ViewState = require("src.view_state")
 local CanvasPresets = require("src.canvas_presets")
 local Gallery = require("src.gallery")
+local GalleryStorage = require("src.gallery_storage")
 local BrushCatalog = require("src.brush_catalog")
 local EditorPreferences = require("src.editor_preferences")
 local ColorState = require("src.color_state")
@@ -72,6 +73,13 @@ local layer_e2e = os.getenv('PAINT_LUA_LAYER_E2E') == '1'
 local layer_e2e_stage = 0
 local gallery_e2e = os.getenv("PAINT_LUA_GALLERY_E2E") == "1"
 local gallery_e2e_stage = 0
+local gallery_persist_e2e=os.getenv('PAINT_LUA_GALLERY_PERSIST_E2E')
+local gallery_persist_stage=0
+-- Autotestes/capturas não devem criar dados persistentes por acidente.
+local persistence_enabled=not (smoke or e2e or layer_e2e or
+    settings_e2e or gallery_e2e or color_e2e or
+    os.getenv('PAINT_LUA_BRIDGE_E2E')=='1' or
+    os.getenv('PAINT_LUA_GALLERY_STORAGE_E2E')=='1')
 local smoke_screen = os.getenv("PAINT_LUA_SCREEN") or "title"
 local capture_requested, capture_done, capture_pending, capture_error = false, false, false, nil
 local C = Theme.colors
@@ -146,6 +154,45 @@ end
 local function notice(s)
     toast=s
     toast_until=love.timer.getTime()+3.5
+end
+local function persist_gallery()
+    if not persistence_enabled then return true end
+    local ok,err=GalleryStorage.save(gallery)
+    if not ok then notice('Galeria: falha ao salvar índice: '..tostring(err)) end
+    return ok,err
+end
+local function save_current_artwork()
+    if not persistence_enabled or not active_artwork_id then return true end
+    paint:sync(state)
+    local ok,err=paint:save()
+    if not ok then
+        notice('Falha ao salvar a obra: '..tostring(err))
+        return nil,err
+    end
+    return persist_gallery()
+end
+local function back_to_gallery()
+    if not save_current_artwork() then return end
+    state:open_gallery()
+    panel=nil
+end
+local function open_gallery_artwork(item)
+    if not persistence_enabled then
+        state:reopen_canvas(item.width,item.height)
+        active_artwork_id=item.id
+        view:reset()
+        return
+    end
+    local doc,warning=GalleryStorage.loadArtwork(item.id)
+    if not doc then
+        notice('Não foi possível abrir '..item.name..': '..tostring(warning))
+        return
+    end
+    paint:attachDocument(state,doc,item.id)
+    active_artwork_id=item.id
+    view:reset()
+    panel=nil
+    if warning then notice(warning) end
 end
 local function save_preferences()
     -- Screenshot and interaction tests start with deterministic defaults.
@@ -352,6 +399,7 @@ local function gallery_header()
         gallery_item_scroll=0
         gallery_menu=nil
         gallery:clear_selection()
+        persist_gallery()
     end,"back")
     local actions={
         {"plus",function() gallery_menu=gallery_menu=="new" and nil or "new" end},
@@ -431,10 +479,9 @@ local function gallery_item(tile,item)
             elseif item.type=="folder" then
                 gallery:enter(id)
                 gallery_item_scroll=0
+                persist_gallery()
             else
-                state:reopen_canvas(item.width,item.height)
-                active_artwork_id=id
-                view:reset()
+                open_gallery_artwork(item)
             end
             gallery_menu=nil
         end,item.type.."_"..id)
@@ -552,6 +599,7 @@ local function gallery_screen()
                 if not ok then notice("Move not permitted: folder hierarchy.")
                 else
                     gallery_menu=nil;gallery_selecting=false
+                    persist_gallery()
                     notice(result.." item(s) moved.")
                 end
             end,"move_to_"..fid)
@@ -599,6 +647,7 @@ local function gallery_screen()
                 gallery:add_folder(gallery_input)
             end
             gallery_dialog=nil
+            persist_gallery()
         end,true)
         hit(xx+37+(ww-63)/2,yy+171,(ww-63)/2,39,function()
             local valid=gallery_input~="" and #gallery_input<=100
@@ -609,6 +658,7 @@ local function gallery_screen()
                 else gallery:add_folder(gallery_input) end
                 gallery_dialog=nil
                 gallery_item_scroll=0
+                persist_gallery()
             else notice("Enter a valid folder name.") end
         end,"folder_confirm")
     end
@@ -619,6 +669,13 @@ local function finish_new_canvas(wi,he)
     state:create_canvas(wi,he)
     active_artwork_id=gallery:add_artwork(
         wi,he,"Untitled "..tostring(gallery:total_artworks()+1))
+    if persistence_enabled then
+        paint:sync(state)
+        paint:setArtwork(active_artwork_id)
+        local ok,err=paint:save()
+        if not ok then notice('Obra criada, mas não salva: '..tostring(err))
+        else persist_gallery() end
+    end
     view:reset()
     panel=nil;gallery_menu=nil;focus=nil
     gallery_selecting=false
@@ -2187,10 +2244,7 @@ function draw_editor_panel()
         end
     elseif name=="back" then
         label("Back",x+20,y+69,w-40,"normal","center",C.white)
-        plain_button(x+20,y+127,w-40,42,"Back to My Gallery",function()
-            state:open_gallery()
-            panel=nil
-        end,true)
+        plain_button(x+20,y+127,w-40,42,"Back to My Gallery",back_to_gallery,true)
         plain_button(x+20,y+191,w-40,42,"Settings",function()
             set_panel("settings")
         end)
@@ -2301,6 +2355,16 @@ function love.load()
     font.icon=love.graphics.newFont(14)
     font.big_icon=love.graphics.newFont(26)
     IconPack.load()
+    if persistence_enabled then
+        local loaded,warning,fresh=GalleryStorage.load()
+        gallery=loaded
+        if fresh then
+            local migrated,reason=GalleryStorage.importLegacy(gallery)
+            if migrated then notice('Obra antiga importada para a galeria')
+            elseif reason then notice('Importação antiga: '..tostring(reason)) end
+        end
+        if warning then notice(warning) end
+    end
     if not (smoke or e2e or settings_e2e or gallery_e2e) then
         local content=love.filesystem.read("editor-preferences.txt")
         if content then
@@ -2746,7 +2810,13 @@ function love.keypressed(key)
         notice("Seleção cancelada")
         return
     end
-    if paint:key(state,key) then notice(paint.status);return end
+    if paint:key(state,key) then
+        if key=='s' and persistence_enabled and paint.status:match('^Salvo:') then
+            persist_gallery()
+        end
+        notice(paint.status)
+        return
+    end
     if state.screen=="editor" and panel=="color" and color_dialog then
         if key=="escape" then color_dialog=nil
         elseif key=="backspace" then
@@ -2806,6 +2876,7 @@ function love.keypressed(key)
                     gallery:rename(gallery_dialog.id,gallery_input)
                 else gallery:add_folder(gallery_input) end
                 gallery_dialog=nil
+                persist_gallery()
             end
         end
         return
@@ -3241,7 +3312,83 @@ function love.focus(focused)
         paint:finishTransformDrag()
     end
 end
+-- Teste da interface real em dois processos: gravar, reiniciar e reabrir.
+-- O CI chama uma vez com 'create' e depois com 'check'.
+local function gallery_persist_update()
+    if gallery_persist_e2e=='create' then
+        if gallery_persist_stage==0 then
+            assert(gallery:total_artworks()==0,'CI precisa de galeria vazia')
+            click_control('brush')
+        elseif gallery_persist_stage==1 then
+            click_control('plus')
+        elseif gallery_persist_stage==2 then
+            click_control('new_folder')
+        elseif gallery_persist_stage==3 then
+            for character in ('Projetos'):gmatch('.') do love.textinput(character) end
+            click_control('folder_confirm')
+            assert(gallery:get(1).name=='Projetos','pasta não criada')
+        elseif gallery_persist_stage==4 then
+            click_control('folder_1')
+        elseif gallery_persist_stage==5 then
+            click_control('plus')
+        elseif gallery_persist_stage==6 then
+            click_control('new_canvas')
+        elseif gallery_persist_stage==7 then
+            click_control('OK')
+            assert(state.screen=='editor' and active_artwork_id==2,
+                'arquivo de obra não foi criado')
+        elseif gallery_persist_stage==8 then
+            state:set_brush_size(15)
+            state:set_color(210,30,55)
+            local left=preferences.tool_position=='left' and 62 or 0
+            local right=preferences.tool_position=='right' and 75 or 34
+            local x=(left+(W-left-right)/2)*scale
+            local y=(62+(H-160)/2)*scale
+            love.mouse.setPosition(x,y)
+            love.mousepressed(x,y,1)
+            love.mousereleased(x,y,1)
+            local doc=paint.doc
+            assert(doc and next(doc.layers[doc.sel].tiles),'pixels não foram pintados')
+        elseif gallery_persist_stage==9 then
+            click_control('back')
+        elseif gallery_persist_stage==10 then
+            click_control('Back to My Gallery')
+            assert(state.screen=='gallery','não voltou à galeria')
+        else
+            local loaded=GalleryStorage.load()
+            assert(loaded:get(1).type=='folder' and loaded:get(2).type=='artwork',
+                'catálogo não persistiu')
+            local doc=assert(GalleryStorage.loadArtwork(2),'NPNT da obra ausente')
+            assert(next(doc.layers[doc.sel].tiles),'pixel não salvo no NPNT')
+            print('PASS: galeria persistente E2E: criação, pintura e autosave')
+            love.event.quit(0)
+            return
+        end
+    else
+        if gallery_persist_stage==0 then
+            assert(gallery:get(1).name=='Projetos' and gallery:get(2).parent==1,
+                'galeria não foi restaurada após reiniciar LÖVE')
+            click_control('brush')
+        elseif gallery_persist_stage==1 then
+            click_control('artwork_2')
+            assert(state.screen=='editor' and active_artwork_id==2,
+                'artwork não abriu depois de reiniciar')
+        else
+            local layer=paint.doc.layers[paint.doc.sel]
+            assert(next(layer.tiles),'obra perdeu seus pixels após reinício')
+            print('PASS: galeria persistente E2E: abertura após reinício')
+            love.event.quit(0)
+            return
+        end
+    end
+    gallery_persist_stage=gallery_persist_stage+1
+end
+
 function love.update()
+    if gallery_persist_e2e and #controls>0 then
+        gallery_persist_update()
+        return
+    end
     local result=paint:update()
     if result then notice(result) end
     if smoke and capture_done then
@@ -3484,4 +3631,12 @@ function love.update()
         print("PASS: UI LÖVE E2E (gallery, layers, selection, masks/groups and brush)")
         love.event.quit(0)
     end
+end
+
+-- Não sair silenciosamente com alterações não gravadas.
+function love.quit()
+    if persistence_enabled and state.screen=='editor' and active_artwork_id then
+        if not save_current_artwork() then return true end
+    end
+    return false
 end

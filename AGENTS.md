@@ -21,3 +21,6 @@
 
 ## Atualização v0.26
 Miniaturas reais de camadas/máscaras com cache de revisões (`core/thumbnail.lua`), ordenação de camadas atômica (`core/layers.lua`) e movimentação de grupos inteiros entre irmãos (`core/groups.lua`). O painel Layer suporta scroll, ↑/↓ e arraste de linhas visíveis; o painel avançado tem ↑/↓ de grupos. Sem alterar NPNT5. Movimentos inválidos são bloqueados, histórico e IDs permanecem corretos. Próximos trabalhos: miniatura composta de grupos, scroll/drag refinados e desempenho no Windows.
+
+- **v0.27:** a galeria persiste no save-directory do LÖVE; um NPNT por ID e dois índices alternados. Nunca gere nome de arquivo a partir do nome de uma obra. O backup `.bak` e a migração de `meu-desenho.npnt` não devem ser descartados.
+- Rode `tests/test_gallery_storage.lua` e o teste E2E em duas execuções LÖVE ao modificar catalogação e salvamento.

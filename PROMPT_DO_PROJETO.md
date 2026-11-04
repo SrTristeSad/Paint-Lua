@@ -33,3 +33,7 @@ A ponte passou a integrar as APIs reais de máscaras (`core.layers`/`core.mask`)
 
 ## Atualização v0.26
 Miniaturas reais de camadas/máscaras com cache de revisões (`core/thumbnail.lua`), ordenação de camadas atômica (`core/layers.lua`) e movimentação de grupos inteiros entre irmãos (`core/groups.lua`). O painel Layer suporta scroll, ↑/↓ e arraste de linhas visíveis; o painel avançado tem ↑/↓ de grupos. Sem alterar NPNT5. Movimentos inválidos são bloqueados, histórico e IDs permanecem corretos. Próximos trabalhos: miniatura composta de grupos, scroll/drag refinados e desempenho no Windows.
+
+## v0.27 — Persistência da My Gallery
+
+A decisão de prioridade foi implementar **salvamento de múltiplas obras sem nuvem e sem repositórios extras**. O módulo `src/gallery_storage.lua` grava dois catálogos alternados e um NPNT por ID de obra em `gallery/works/`. `app/ibis_main.lua` contém autosave ao sair do editor, na criação e no encerramento; `app/paint_bridge.lua` mantém o vínculo entre ID e documento. A migração do antigo `meu-desenho.npnt` nunca o apaga. Leia `docs/GALERIA_PERSISTENTE_v027.md` e os testes correspondentes antes de mudar persistência; evitar destruir desenhos, sobrescrever IDs ou abrir uma tela vazia no lugar de uma obra ausente.

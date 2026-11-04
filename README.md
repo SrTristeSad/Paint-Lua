@@ -1,4 +1,4 @@
-# Paint-Lua — Projeto único
+# Paint-Lua — Projeto único (v0.27)
 
 Editor experimental de pintura digital em Lua / LÖVE 11.5. A interface de Ibis-Lua e o núcleo de pintura v0.21 são **código-fonte do mesmo repositório**. Não há submódulos, download do Ibis-Lua na inicialização ou integração atual com DragonBones/Bono-Lua.
 
@@ -19,6 +19,14 @@ Clone alternativo: git clone https://github.com/SrTristeSad/Paint-Lua.git (sem -
 - **app/paint_bridge.lua**: conexão de ferramentas, documentos, camadas, pincel, histórico e salvamento ao núcleo.
 - **main.lua**, **conf.lua**, **testar.bat**: inicialização.
 - **tests/**, **tools/**, **docs/**: testes e documentação da interface e do núcleo.
+
+## Novidade v0.27 — galeria de múltiplas obras
+
+A **My Gallery** agora persiste obras diferentes em arquivos NPNT separados, com pastas, títulos e movimentação de itens preservados após reiniciar o programa. O editor **salva automaticamente ao voltar à galeria e ao encerrar normalmente**, além de permitir `Ctrl+S`. Ele mostra erro e mantém a edição aberta quando o salvamento falha. Um arquivo ausente/corrompido não é substituído por um canvas em branco.
+
+O catálogo alterna entre dois índices validados, e cada obra mantém uma cópia de segurança anterior ao sobrescrever; o formato de projeto continua **NPNT1–NPNT5**. Ao iniciar sem catálogo, tenta importar o antigo `meu-desenho.npnt` sem apagá-lo. O repositório e o ZIP continuam completamente independentes do Ibis-Lua.
+
+Consulte [docs/GALERIA_PERSISTENTE_v027.md](docs/GALERIA_PERSISTENTE_v027.md) para limites e recuperação. **Ainda não existe galeria na nuvem, exclusão definitiva nem miniaturas reais das obras na galeria**; as miniaturas de camadas continuam funcionando. Dados ficam no diretório de salvamento do LÖVE, não junto ao executável.
 
 ## Situação funcional
 

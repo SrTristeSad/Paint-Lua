@@ -12,6 +12,7 @@ local Transform = require('core.transform')
 local Layers = require('core.layers')
 local Groups = require('core.groups')
 local Thumbnail = require('core.thumbnail')
+local GalleryStorage = require('src.gallery_storage')
 
 local Bridge = {}
 Bridge.__index = Bridge
@@ -35,7 +36,7 @@ function Bridge.new()
     stroke=nil,job=nil,jobKind=nil,selectionDrag=nil,transform=nil,transformDrag=nil,
     cache=nil,gpu={},thumbCache=setmetatable({}, {__mode='k'}),
     thumbRenders=0,maskMode=nil,maskOwner=nil,
-    filename='meu-desenho.npnt',status='Paint-Lua v0.26 pronto'},Bridge)
+    artworkId=nil,filename='meu-desenho.npnt',status='Paint-Lua v0.27 pronto'},Bridge)
 end
 
 function Bridge:dropImages()
@@ -74,6 +75,8 @@ function Bridge:sync(model)
     self.selectionDrag=nil
     self:cancelTransform()
     self.maskMode,self.maskOwner=nil,nil
+    self.artworkId=nil
+    self.filename='meu-desenho.npnt'
     self.doc=Doc.new(model.document.width,model.document.height,'Paint-Lua')
     self.doc.layers={}
     self.byId={}
@@ -796,28 +799,21 @@ function Bridge:draw(x,y)
   g.setColor(1,1,1,1)
 end
 
-function Bridge:save()
-  if self.transform then return nil,'confirme ou cancele a transformação primeiro' end
-  if not self.doc then return nil,'nenhum documento' end
-  if self.job then return nil,'operação em andamento' end
-  if self.selectionDrag then return nil,'finalize a seleção antes de salvar' end
-  self:finish(false)
-  local ok,err=Project.save(self.doc,self.filename)
-  self.status=ok and ('Salvo: '..self.filename) or ('Erro: '..tostring(err))
-  return ok,err
+function Bridge:setArtwork(id)
+  self.artworkId=id
+  self.filename=GalleryStorage.artworkPath(id)
 end
 
-function Bridge:load(model)
+-- Recebe um documento já decodificado e validado; preserva o documento
+-- atual caso o arquivo solicitado não tenha podido ser aberto.
+function Bridge:attachDocument(model,doc,id)
+  assert(doc and doc.w and doc.h,'documento inválido')
+  if id then GalleryStorage.artworkPath(id) end
   self:cancelTransform()
   self:finish(true)
   self:cancelJob()
   self.selectionDrag=nil
   self.maskMode,self.maskOwner=nil,nil
-  local ok,doc,err=pcall(Project.load,self.filename)
-  if not ok or not doc then
-    self.status='Abertura: '..tostring(ok and err or doc)
-    return nil,self.status
-  end
   self:dropImages()
   self.doc=doc
   self.modelDocument={width=doc.w,height=doc.h}
@@ -831,6 +827,41 @@ function Bridge:load(model)
   self.uiByLayer={}
   self:refreshModel(model)
   self.cache=Composite.newCache(doc,{maxTiles=96})
+  if id then self:setArtwork(id)
+  else self.artworkId=nil;self.filename='meu-desenho.npnt' end
+  self.status='Obra aberta'
+  return true
+end
+
+function Bridge:save()
+  if self.transform then return nil,'confirme ou cancele a transformação primeiro' end
+  if not self.doc then return nil,'nenhum documento' end
+  if self.job then return nil,'operação em andamento' end
+  if self.selectionDrag then return nil,'finalize a seleção antes de salvar' end
+  self:finish(false)
+  local ok,err
+  if self.artworkId then
+    ok,err=GalleryStorage.saveArtwork(self.doc,self.artworkId)
+  else
+    ok,err=Project.save(self.doc,self.filename)
+  end
+  self.status=ok and ('Salvo: '..self.filename) or ('Erro: '..tostring(err))
+  return ok,err
+end
+
+function Bridge:load(model)
+  local doc,err
+  if self.artworkId then
+    doc,err=GalleryStorage.loadArtwork(self.artworkId)
+  else
+    doc,err=Project.load(self.filename)
+  end
+  if not doc then
+    self.status='Abertura: '..tostring(err)
+    return nil,self.status
+  end
+  local id=self.artworkId
+  self:attachDocument(model,doc,id)
   self.status='Aberto: '..self.filename
   return true
 end
