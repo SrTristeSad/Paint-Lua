@@ -1861,6 +1861,7 @@ require('tests.test_png_interpolation_v031')(check)
 require('tests.test_png_rotation_aa_v032')(check)
 require('tests.test_transform_smooth_v033')(check)
 require('tests.test_transform_handles_v034')(check)
+require('tests.test_selection_invert_v035')(check)
 
 print(string.format("\n%d passou, %d falhou", passed, failed))
 if failed > 0 then os.exit(1) end

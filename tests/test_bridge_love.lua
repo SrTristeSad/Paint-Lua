@@ -549,3 +549,30 @@ assert(handlesBridge:save(),'não salvou seleção transformada por mouse')
 assert(handlesBridge:load(HandlesModel),'não reabriu seleção transformada por mouse')
 love.filesystem.remove(handlesBridge.filename)
 print('PASS: LÖVE real v0.34: alças GPU, escala, giro, movimento, undo/redo e NPNT5')
+
+
+-- v0.35: máscara invertida com ImageData real e persistência NPNT5.
+local invModel=Model.new()
+invModel:open_gallery();invModel:open_new_canvas();invModel:create_canvas(64,64)
+local invBridge=Bridge.new()
+local invDoc=assert(invBridge:sync(invModel))
+invDoc.selection=Selection.rect(invDoc,8,8,11,11)
+local invTile,invKey=Doc.getTile(invDoc.layers[1],0,0,true)
+invTile:setPixel(9,9,1,0,0,1)
+Doc.markDirty(invDoc.layers[1],invKey)
+assert(invBridge:invertSelection(invModel),'LÖVE: inversão falhou')
+assert(not Selection.contains(invDoc.selection,9,9)
+  and Selection.contains(invDoc.selection,63,63),'LÖVE: máscara incorreta')
+assert(select(4,invTile:getPixel(9,9))==1,'LÖVE: pixels alterados')
+assert(invBridge:historyStep(invModel,false)
+  and Selection.contains(invDoc.selection,9,9),'LÖVE: undo falhou')
+assert(invBridge:historyStep(invModel,true)
+  and not Selection.contains(invDoc.selection,9,9),'LÖVE: redo falhou')
+invBridge.filename='ci-paint-lua-v035.npnt'
+assert(invBridge:save(),'LÖVE: não salvou seleção invertida')
+assert(invBridge:load(invModel),'LÖVE: não reabriu NPNT5')
+assert(invBridge.doc.selection.mask.inverted
+  and not Selection.contains(invBridge.doc.selection,9,9),
+  'LÖVE: seleção não persistiu')
+love.filesystem.remove(invBridge.filename)
+print('PASS: LÖVE real v0.35: inversão, pixels, undo/redo e NPNT5')

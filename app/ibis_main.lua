@@ -1510,6 +1510,9 @@ function draw_editor_panel()
         y=layer_position and layer_position.y or H-h-91
         x=math.max(63,math.min(W-w-5,x))
         y=math.max(3,math.min(H-h-54,y))
+    elseif name=='selection' then
+        w=math.min(320,W-90);h=math.min(390,H-160)
+        x=W-w-22;y=58
     else
         w=math.min(320,W-90);h=math.min(330,H-160)
         x=W-w-22;y=58
@@ -1551,9 +1554,11 @@ function draw_editor_panel()
         end
         action(y+197,"Selecionar tudo",function() paint:selectAll(state) end,
             "selection_all")
-        action(y+240,"Desmarcar",function() paint:clearSelection() end,
+        action(y+240,"Inverter seleção",function() paint:invertSelection(state) end,
+            "selection_invert")
+        action(y+283,"Desmarcar",function() paint:clearSelection() end,
             "selection_clear")
-        label("Ctrl+A: tudo   Ctrl+D: desmarcar",x+12,y+292,w-24,
+        label("Ctrl+A / Ctrl+D / Ctrl+Shift+I",x+12,y+335,w-24,
             "tiny","center",C.soft)
     elseif name=="view" then
         local bx=x+12
@@ -3132,7 +3137,8 @@ function love.keypressed(key)
     if key=="f12" then capture_requested=true;return end
     if paint:pngImportKey(key) then notice(paint.status);return end
     if state.screen=='editor' and key=='i' and
-        love.keyboard.isDown('lctrl','rctrl','lgui','rgui') then
+        love.keyboard.isDown('lctrl','rctrl','lgui','rgui')
+        and not love.keyboard.isDown('lshift','rshift') then
         open_import_picker();return
     end
     if paint:transformKey(state,key) then notice(paint.status);return end

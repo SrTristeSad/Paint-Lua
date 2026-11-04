@@ -518,6 +518,23 @@ function Bridge:selectAll(model)
   return self:applySelection(Selection.rect(doc,0,0,doc.w-1,doc.h-1))
 end
 
+
+-- Inverte a seleção como uma única operação estrutural (sem tocar RGBA).
+function Bridge:invertSelection(model)
+  local doc=self:sync(model)
+  if not doc then self.status='Abra um documento';return false end
+  if self.stroke or self.job or self.transform or self.selectionDrag
+    or self.pngPreview or doc.history.stroke then
+    self.status='Conclua a operação atual antes de inverter a seleção'
+    return false
+  end
+  local selection,err=Selection.invert(doc,doc.selection)
+  if err then self.status=err;return false end
+  local changed=self:applySelection(selection)
+  if changed then self.status='Seleção invertida' end
+  return changed
+end
+
 function Bridge:clearSelection()
   self.selectionDrag=nil
   return self:applySelection(nil)
@@ -1170,6 +1187,9 @@ function Bridge:key(model,key)
   if model.screen~='editor' then return false end
   local k=love.keyboard
   if not (k and k.isDown('lctrl','rctrl','lgui','rgui')) then return false end
+  if key=='i' and k.isDown('lshift','rshift') then
+    self:invertSelection(model);return true
+  end
   if key=='a' then self:selectAll(model);return true end
   if key=='d' then self:clearSelection();return true end
   if key=='s' then

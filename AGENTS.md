@@ -57,3 +57,14 @@ Testes em `tests/test_transform_smooth_v033.lua` e E2E com
 ### Integração v0.34
 
 As alças de Transformar são calculadas em `core/transform.lua` e usadas em `app/paint_bridge.lua`; manter hit-test e desenho sincronizados. Arrastar cantos preserva a proporção e o canto oposto. Alças ficam ocultas se a seleção ocupar menos de 28 px em tela. Veja `docs/ALCAS_TRANSFORMACAO_v034.md` e a suíte de testes.
+
+### Atualização v0.35
+
+`core.selection.invert` oferece complemento esparso de retângulos, laços
+e varinha usando `mask.inverted=true`. `Selection.contains` agora consulta
+`Mask.value`, sem mudança de formato NPNT5. A inversão não altera pixels,
+entra como um só undo e é acessada por `Bridge:invertSelection`, pelo painel
+Selection Area e por Ctrl+Shift+I (Ctrl+I ainda importa PNG).
+A rasterização inicial de retângulos/laços é limitada a 2 milhões de pixels;
+a reversão de máscaras invertidas lê no máximo 256 tiles para a bounding box.
+Consulte `docs/INVERSAO_SELECAO_v035.md` e a suíte de testes.

@@ -1,4 +1,4 @@
-# Paint-Lua — Projeto único (v0.34)
+# Paint-Lua — Projeto único (v0.35)
 
 Editor experimental de pintura digital em Lua / LÖVE 11.5. A interface de Ibis-Lua e o núcleo de pintura v0.21 são **código-fonte do mesmo repositório**. Não há submódulos, download do Ibis-Lua na inicialização ou integração atual com DragonBones/Bono-Lua.
 
@@ -9,6 +9,22 @@ Editor experimental de pintura digital em Lua / LÖVE 11.5. A interface de Ibis-
 3. Execute **testar.bat** na pasta raiz. Não precisa de Git, Python, PowerShell ou conexão à internet para iniciar.
 
 Clone alternativo: git clone https://github.com/SrTristeSad/Paint-Lua.git (sem --recurse-submodules).
+
+## Novidade v0.35 — inverter seleção
+
+No painel **Selection Area → Inverter seleção** (atalho **Ctrl+Shift+I**),
+a área selecionada passa a ficar excluída e o restante do canvas passa a
+ser selecionado. Funciona com retângulos, laços e varinha; **Ctrl+I**
+continua reservado à importação PNG.
+
+O comando não altera pixels, cria uma operação de histórico e é salvo em
+**NPNT5**. A inversão usa uma máscara esparsa, sem rasterizar todo o canvas.
+Inverter sem seleção seleciona tudo; inverter uma seleção retangular total
+desmarca. Por segurança, regiões iniciais retangulares ou laços com mais
+de **2 milhões de pixels** não podem ser invertidos de uma vez.
+
+Consulte [docs/INVERSAO_SELECAO_v035.md](docs/INVERSAO_SELECAO_v035.md).
+Transformar mantém os limites e filtros Suave/Pixelado existentes.
 
 ## Novidade v0.34 — alças de transformação
 

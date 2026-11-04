@@ -78,3 +78,11 @@ integração no LÖVE real via CI e manualmente no Windows.
 ### Integração v0.34
 
 As alças de Transformar são calculadas em `core/transform.lua` e usadas em `app/paint_bridge.lua`; manter hit-test e desenho sincronizados. Arrastar cantos preserva a proporção e o canto oposto. Alças ficam ocultas se a seleção ocupar menos de 28 px em tela. Veja `docs/ALCAS_TRANSFORMACAO_v034.md` e a suíte de testes.
+
+### Estado v0.35
+
+Inverter seleção: máscaras esparsas com `mask.inverted` e NPNT5,
+desfazer/refazer estrutural, nenhum pixel modificado. Controlado no
+Selection Area e em Ctrl+Shift+I (não modificar Ctrl+I, importação PNG).
+Bloqueia imagens muito grandes ao rasterizar a seleção original.
+Seleções combinadas e feather ainda não estão implementados.
