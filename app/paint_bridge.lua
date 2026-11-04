@@ -8,6 +8,7 @@ local Project = require("core.project")
 local Fill = require('core.fill')
 local Job = require('core.job')
 local Selection = require('core.selection')
+local SelectionAnts = require('app.selection_ants')
 local Transform = require('core.transform')
 local Layers = require('core.layers')
 local Groups = require('core.groups')
@@ -38,12 +39,13 @@ function Bridge.new()
     stroke=nil,job=nil,jobKind=nil,selectionDrag=nil,selectionMode='replace',jobSelectionMode=nil,
     transform=nil,transformDrag=nil,
     pngPreview=nil,pngDrag=nil,
-    cache=nil,gpu={},thumbCache=setmetatable({}, {__mode='k'}),
+    cache=nil,gpu={},ants={},thumbCache=setmetatable({}, {__mode='k'}),
     thumbRenders=0,maskMode=nil,maskOwner=nil,
     artworkId=nil,filename='meu-desenho.npnt',status='Paint-Lua v0.27 pronto'},Bridge)
 end
 
 function Bridge:dropImages()
+  SelectionAnts.release(self.ants)
   for _,image in pairs(self.gpu) do
     if image.release then image:release() end
   end
@@ -831,7 +833,7 @@ end
 
 -- A UI fornece transformacao/zoom antes da chamada; as coordenadas locais
 -- da borda são iguais às usadas por Bridge:draw para os tiles.
-function Bridge:drawSelection(x,y,canvasScale)
+function Bridge:drawSelection(x,y,canvasScale,seconds)
   if not self.doc then return end
   local sel=self.doc.selection
   local drag=self.selectionDrag
@@ -843,35 +845,43 @@ function Bridge:drawSelection(x,y,canvasScale)
     Transform.drawPreview(self.transform,x,y,canvasScale)
   end
   if sel and not self.transform then
-    if sel.kind=='wand' and not sel.mask.inverted
-      and next(sel.mask.tiles)==nil then
-      -- Máscara vazia: NÃO desenhar a moldura cheia do documento.
-    elseif sel.kind=='polygon' then
-      local p=sel.points
-      for i=1,#p do
-        local a,b=p[i],p[i%#p+1]
-        g.line(x+a[1],y+a[2],x+b[1],y+b[2])
-      end
-    elseif sel.kind=='wand' then
-      if not self.selectionOutline or self.selectionOutline.selection~=sel then
-        -- Regiões pequenas seguem imediatas; as extensas são processadas em
-        -- lotes, sem inventar molduras para seleções descontínuas/invertidas.
-        local simple=sel.w*sel.h<=16384 and
-          Selection.outline(sel,16384,8192) or nil
-        self.selectionOutline={selection=sel,segments=simple,
-          job=not simple and Selection.startOutline(sel,{maxSegments=8192}) or nil}
-      end
-      local cache=self.selectionOutline
-      if cache.job and not cache.job.done then
-        Selection.stepOutline(cache.job,8192)
-      end
-      local segments=cache.job and cache.job.lines or cache.segments
-      for _,edge in ipairs(segments or {}) do
-        g.line(x+edge[1],y+edge[2],x+edge[3],y+edge[4])
-      end
-    else
-      g.rectangle('line',x+sel.x,y+sel.y,sel.w,sel.h)
+    local now=seconds
+    if now==nil then
+      now=love.timer and love.timer.getTime() or os.clock()
     end
+    SelectionAnts.render(g,self.ants,now,function(animated)
+      if animated then g.setColor(1,1,1,0.95)
+      else g.setColor(0.96,0.30,0.20,0.95) end
+      -- A geometria é sempre a mesma da v0.37. Apenas as cores dos pixels
+      -- de linha alternam na tela; nunca se inventam segmentos ou bboxes.
+      if sel.kind=='wand' and not sel.mask.inverted
+        and next(sel.mask.tiles)==nil then
+        -- Máscara vazia: não há contorno nem animação visível.
+      elseif sel.kind=='polygon' then
+        local p=sel.points
+        for i=1,#p do
+          local a,b=p[i],p[i%#p+1]
+          g.line(x+a[1],y+a[2],x+b[1],y+b[2])
+        end
+      elseif sel.kind=='wand' then
+        if not self.selectionOutline or self.selectionOutline.selection~=sel then
+          local simple=sel.w*sel.h<=16384 and
+            Selection.outline(sel,16384,8192) or nil
+          self.selectionOutline={selection=sel,segments=simple,
+            job=not simple and Selection.startOutline(sel,{maxSegments=8192}) or nil}
+        end
+        local cache=self.selectionOutline
+        if cache.job and not cache.job.done then
+          Selection.stepOutline(cache.job,8192)
+        end
+        local segments=cache.job and cache.job.lines or cache.segments
+        for _,edge in ipairs(segments or {}) do
+          g.line(x+edge[1],y+edge[2],x+edge[3],y+edge[4])
+        end
+      else
+        g.rectangle('line',x+sel.x,y+sel.y,sel.w,sel.h)
+      end
+    end)
   end
   if drag then
     g.setColor(0.17,0.62,0.95,0.98)

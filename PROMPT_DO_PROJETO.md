@@ -108,3 +108,14 @@ entre pan, rotação e zoom. Um limite de pontos/segmentos por quadro
 evita travamentos; contornos parciais são sempre linhas verdadeiras.
 Pixels, histórico, formato NPNT5 e APIs de seleção anteriores não mudam.
 Consulte `docs/CONTORNOS_SELECAO_v037.md`.
+
+### Estado v0.38 — marching ants
+
+A v0.38 aplica animação claro/escuro ao contorno geométrico real das
+seleções com shader em coordenadas de tela. O padrão de faixa mede
+5 px e se desloca 24 px/s, com ciclo curto para manter precisão. O
+shader é cacheado por Bridge e libera recursos no reset da GPU. 
+Sem suporte a shader o contorno anterior permanece estático. O drag
+continua azul, a prévia de transformação mantém seu desenho próprio
+e documentos/NPNT/histórico/pintura não são alterados. Testar no LÖVE
+real, inclusive diferença temporal de pixels capturados da GPU.
