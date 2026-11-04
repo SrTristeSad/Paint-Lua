@@ -3921,6 +3921,8 @@ function love.update()
     if selection_outline_e2e and #controls>0 then
         local cache=paint.selectionOutline
         assert(cache and cache.job,'UI v0.37: contorno não foi iniciado na GPU')
+        assert(paint.ants and paint.ants.shader and not paint.ants.unavailable,
+            'UI v0.38: shader das formigas não foi inicializado no canvas')
         if selection_outline_e2e_stage==0 then
             if not cache.job.done then return end
             assert(not cache.job.truncated and #cache.job.lines==8,

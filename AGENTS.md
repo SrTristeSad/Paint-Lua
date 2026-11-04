@@ -98,3 +98,22 @@ truncamento seguro sem moldura falsa. Preserve a API síncrona antiga
 `Selection.outline` para compatibilidade e testes. Ver
 `tests/test_selection_outline_v037.lua`,
 `docs/CONTORNOS_SELECAO_v037.md` e E2E real da interface.
+
+### Atualização v0.38 — contornos animados
+
+`app/selection_ants.lua` anima preto/branco por shader de pixel,
+alternando faixas projetadas em **coordenadas da tela**, não em
+unidades do documento. `Ants.phase` mantém o uniform periódico;
+`Ants.render` compila sob demanda, reutiliza shader por Bridge e
+restaura `love.graphics.getShader()` mesmo após erro no desenho.
+`Bridge:dropImages` libera o shader. Falha de compilação recua para
+contorno estático, sem recompilar a cada quadro. Preserve a geometria
+do contorno incremental v0.37, a seleção vazia e o desenho do drag
+sem o shader das formigas. `Bridge:drawSelection(x,y,scale,seconds)`
+tem quarto argumento opcional somente para testes determinísticos.
+Veja `tests/test_selection_ants_v038.lua`,
+`docs/CONTORNOS_ANIMADOS_v038.md` e teste GPU real no CI.
+
+Os testes reais do shader ficam em `tests/test_selection_ants_love_v038.lua`,
+chamados no fim de `tests/test_bridge_love.lua` sem criar novos locais
+na função principal (limite de 200 variáveis locais por função no Lua).

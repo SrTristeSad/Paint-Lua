@@ -673,3 +673,6 @@ assert(pcall(OutlineBridge.drawSelection,OutlineBridge,0,0,2.4),
 assert(OutlineBridge.selectionOutline==outlineCache,
   'LÖVE v0.37: mudança de zoom regenerou contornos')
 print('PASS: LÖVE real v0.37: contornos esparsos e invertidos na GPU')
+
+-- v0.38: módulo isolado para manter o limite de 200 locais da VM Lua.
+require('tests.test_selection_ants_love_v038')()

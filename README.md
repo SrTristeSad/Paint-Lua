@@ -1,4 +1,4 @@
-# Paint-Lua — Projeto único (v0.37)
+# Paint-Lua — Projeto único (v0.38)
 
 Editor experimental de pintura digital em Lua / LÖVE 11.5. A interface de Ibis-Lua e o núcleo de pintura v0.21 são **código-fonte do mesmo repositório**. Não há submódulos, download do Ibis-Lua na inicialização ou integração atual com DragonBones/Bono-Lua.
 
@@ -9,6 +9,27 @@ Editor experimental de pintura digital em Lua / LÖVE 11.5. A interface de Ibis-
 3. Execute **testar.bat** na pasta raiz. Não precisa de Git, Python, PowerShell ou conexão à internet para iniciar.
 
 Clone alternativo: git clone https://github.com/SrTristeSad/Paint-Lua.git (sem --recurse-submodules).
+
+## Novidade v0.38 — contornos animados (*marching ants*)
+
+As áreas selecionadas agora são marcadas por faixas **claras e escuras
+em movimento**. A animação é aplicada por shader sobre os **contornos
+exatos** já disponíveis na v0.37 — retângulos, laços, varinha mágica,
+uniões/subtrações e máscaras invertidas continuam usando a mesma
+geometria de seleção.
+
+O desenho utiliza coordenadas da tela para manter faixas de aproximadamente
+**5 pixels**, mesmo durante zoom, rotação e deslocamento. A velocidade
+é de **24 pixels por segundo** e o shader é reutilizado entre quadros,
+sem recalcular pixels de máscara nem criar novos passos de histórico.
+As seleções grandes continuam gerando as bordas progressivamente,
+com os mesmos limites da v0.37.
+
+Se shaders não estiverem disponíveis, o contorno permanece **estático**
+em vez de impedir o uso do editor. A versão não altera RGBA, formatos
+NPNT1–NPNT5, desfazer/refazer ou as decisões de UI anteriores.
+
+Veja [docs/CONTORNOS_ANIMADOS_v038.md](docs/CONTORNOS_ANIMADOS_v038.md).
 
 ## Novidade v0.37 — contornos reais para seleções grandes
 
