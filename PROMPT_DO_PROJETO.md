@@ -97,3 +97,14 @@ uma seleção vazia com máscara raster explícita. O limite de 2 milhões
 de pixels / 256 tiles protege do custo de combinação. Cada gesto entra
 no histórico como uma operação, sem mexer nos pixels. Regressão da
 UI e dos atalhos de importação PNG continua prioridade.
+
+### Estado v0.37 — contorno de seleção fiel
+
+O desenho da seleção raster substitui o fallback de bbox para regiões
+grandes e máscaras invertidas por um processamento incremental apenas
+nos tiles materializados. O perímetro de máscaras invertidas é calculado
+exatamente, inclusive quando os furos alcançam as bordas. Cache persiste
+entre pan, rotação e zoom. Um limite de pontos/segmentos por quadro
+evita travamentos; contornos parciais são sempre linhas verdadeiras.
+Pixels, histórico, formato NPNT5 e APIs de seleção anteriores não mudam.
+Consulte `docs/CONTORNOS_SELECAO_v037.md`.

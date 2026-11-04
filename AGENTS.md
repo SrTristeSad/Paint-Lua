@@ -83,3 +83,18 @@ e 256 tiles candidatos por combinação. Ver
 `docs/COMBINACAO_SELECOES_v036.md`,
 `tests/test_selection_combine_v036.lua` e
 `PAINT_LUA_SELECTION_COMBINE_E2E=1 love .`.
+
+### Atualização v0.37 — contornos esparsos incrementais
+
+`Selection.startOutline(sel)` e `Selection.stepOutline(job,budget)`
+calculam segmentos de borda exatos para seleção raster `kind='wand'`
+inclusive invertida e com bbox muito grande. Não percorrer canvas
+inteiro para contornos de máscaras positivas esparsas; incluir o
+perímetro selecionado no caso de máscaras invertidas, respeitando
+furos junto à borda. `Bridge:drawSelection` mantém cache por identidade
+da seleção; zoom, pan e rotação não descartam o cache. Limites:
+8.192 pontos por quadro e até 8.192 segmentos renderizados, com
+truncamento seguro sem moldura falsa. Preserve a API síncrona antiga
+`Selection.outline` para compatibilidade e testes. Ver
+`tests/test_selection_outline_v037.lua`,
+`docs/CONTORNOS_SELECAO_v037.md` e E2E real da interface.

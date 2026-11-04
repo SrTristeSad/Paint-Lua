@@ -631,3 +631,45 @@ assert(not Selection.contains(emptyDoc.selection,3,3) and
 assert(pcall(emptyBridge.drawSelection,emptyBridge,0,0,1),
   'LÖVE v0.36: desenho da máscara vazia falhou')
 print('PASS: LÖVE v0.36: seleção vazia sem moldura falsa')
+
+-- v0.37: desenhar contorno invertido grande na GPU do LÖVE 11.5.
+local OutlineMask=require('core.mask')
+local OutlineModel=Model.new()
+OutlineModel:open_gallery();OutlineModel:open_new_canvas()
+OutlineModel:create_canvas(1024,1024)
+local OutlineBridge=Bridge.new()
+local OutlineDoc=assert(OutlineBridge:sync(OutlineModel))
+local OutlineSelectionMask=OutlineMask.new(0)
+local OutlineTile=OutlineMask.getTile(OutlineSelectionMask,0,0,true)
+for py=10,12 do
+  for px=10,12 do OutlineTile:setPixel(px,py,1,1,1,1) end
+end
+OutlineSelectionMask.inverted=true
+OutlineDoc.selection={kind='wand',x=0,y=0,w=1024,h=1024,
+  mask=OutlineSelectionMask}
+local nframes=0
+repeat
+  assert(pcall(OutlineBridge.drawSelection,OutlineBridge,0,0,0.55),
+    'LÖVE v0.37: renderização de contorno invertido falhou')
+  nframes=nframes+1
+until (OutlineBridge.selectionOutline and OutlineBridge.selectionOutline.job
+  and OutlineBridge.selectionOutline.job.done) or nframes>40
+local outlineCache=assert(OutlineBridge.selectionOutline)
+local OutlineSegments=assert(outlineCache.job).lines
+local function containsOutlineSegment(x0,y0,x1,y1)
+  for _,s in ipairs(OutlineSegments) do
+    if s[1]==x0 and s[2]==y0 and s[3]==x1 and s[4]==y1 then return true end
+  end
+  return false
+end
+assert(outlineCache.job.done and not outlineCache.job.truncated,
+  'LÖVE v0.37: contorno extenso não terminou')
+assert(#OutlineSegments==8
+  and containsOutlineSegment(10,10,13,10)
+  and containsOutlineSegment(0,0,1024,0),
+  'LÖVE v0.37: contornos de furo e canvas não são exatos')
+assert(pcall(OutlineBridge.drawSelection,OutlineBridge,0,0,2.4),
+  'LÖVE v0.37: zoom do canvas quebrou contornos')
+assert(OutlineBridge.selectionOutline==outlineCache,
+  'LÖVE v0.37: mudança de zoom regenerou contornos')
+print('PASS: LÖVE real v0.37: contornos esparsos e invertidos na GPU')

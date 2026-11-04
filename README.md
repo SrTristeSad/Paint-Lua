@@ -1,4 +1,4 @@
-# Paint-Lua — Projeto único (v0.36)
+# Paint-Lua — Projeto único (v0.37)
 
 Editor experimental de pintura digital em Lua / LÖVE 11.5. A interface de Ibis-Lua e o núcleo de pintura v0.21 são **código-fonte do mesmo repositório**. Não há submódulos, download do Ibis-Lua na inicialização ou integração atual com DragonBones/Bono-Lua.
 
@@ -9,6 +9,26 @@ Editor experimental de pintura digital em Lua / LÖVE 11.5. A interface de Ibis-
 3. Execute **testar.bat** na pasta raiz. Não precisa de Git, Python, PowerShell ou conexão à internet para iniciar.
 
 Clone alternativo: git clone https://github.com/SrTristeSad/Paint-Lua.git (sem --recurse-submodules).
+
+## Novidade v0.37 — contornos reais para seleções grandes
+
+Seleções grandes, descontínuas ou invertidas agora exibem os **contornos
+reais dos pixels** em vez de uma moldura retangular que poderia sugerir
+uma área selecionada incorreta.
+
+O editor calcula o contorno gradualmente, percorrendo apenas os tiles da
+máscara que existem. As áreas invertidas mostram também o perímetro externo
+do canvas **somente onde há pixels selecionados**, respeitando buracos
+que encostam nas bordas. Durante o cálculo, as linhas já disponíveis são
+exatas; novas bordas aparecem progressivamente nos quadros seguintes.
+
+O trabalho por quadro tem limite de **8.192 pontos**; o cache é reutilizado
+ao mover, girar ou ampliar a visualização. Seleções extremamente recortadas
+têm limite de **8.192 segmentos** para preservar a responsividade;
+nesse caso parte das linhas pode não ser exibida, mas nunca é substituída
+por uma moldura falsa. Os pixels, o histórico e o formato NPNT5 não mudaram.
+
+Veja [docs/CONTORNOS_SELECAO_v037.md](docs/CONTORNOS_SELECAO_v037.md).
 
 ## Novidade v0.36 — combinar seleções
 

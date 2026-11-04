@@ -117,6 +117,153 @@ function S.outline(sel,maxArea,maxSegments)
   return lines
 end
 
+
+-- Contornos incrementais para máscaras raster extensas/esparsas (v0.37).
+-- Ao contrário de outline(), percorre só os tiles materializados, mesmo
+-- quando a bbox abrange um canvas enorme. O resultado é reutilizável entre
+-- zoom, rotação e pan: todas as linhas estão em coordenadas do documento.
+-- Para máscaras invertidas, percorre também o perímetro externo selecionado.
+local function addOutlineLine(job,x0,y0,x1,y1)
+  local horizontal=(y0==y1)
+  local runs=horizontal and job.horizontalRuns or job.verticalRuns
+  local key=horizontal and y0 or x0
+  local prev=runs[key]
+  local old=prev and job.lines[prev]
+  if old and ((horizontal and old[3]==x0 and old[4]==y0)
+    or (not horizontal and old[3]==x0 and old[4]==y0)) then
+    old[3],old[4]=x1,y1
+    return true
+  end
+  if #job.lines>=job.maxSegments then
+    job.done=true;job.truncated=true
+    return false
+  end
+  job.lines[#job.lines+1]={x0,y0,x1,y1}
+  runs[key]=#job.lines
+  return true
+end
+
+function S.startOutline(sel,opts)
+  assert(sel and sel.kind=='wand' and sel.mask and
+    type(sel.mask.tiles)=='table','contorno exige máscara de seleção')
+  opts=opts or {}
+  local maxSegments=opts.maxSegments or 8192
+  assert(int(maxSegments,1,65536),'limite de segmentos inválido')
+  local keys={}
+  for key,tile in pairs(sel.mask.tiles) do
+    local tx,ty=Doc.parseKey(key)
+    assert(tx and ty and tile,'tile da seleção inválido')
+    keys[#keys+1]={tx=tx,ty=ty,tile=tile}
+  end
+  table.sort(keys,function(a,b)
+    return a.ty<b.ty or (a.ty==b.ty and a.tx<b.tx)
+  end)
+  return {selection=sel,keys=keys,index=1,px=0,py=0,
+    borderSide=1,borderPos=0,borderStart=nil,
+    phase=sel.mask.inverted and 'border' or 'tiles',
+    lines={},horizontalRuns={},verticalRuns={},
+    maxSegments=maxSegments,scanned=0,done=false,truncated=false}
+end
+
+-- Cada chamada processa no máximo budget pontos (o default é um lote pequeno
+-- para não travar quadros). Linhas já calculadas são exatas; nenhuma moldura
+-- inventada é usada quando ainda restam tiles por examinar.
+function S.stepOutline(job,budget)
+  assert(type(job)=='table' and job.selection and job.lines,
+    'sessão de contorno inválida')
+  budget=budget or 8192
+  assert(int(budget,1,131072),'orçamento de contorno inválido')
+  if job.done then return true,job.lines end
+  local sel=job.selection
+  local remaining=budget
+  while remaining>0 and not job.done do
+    if job.phase=='border' then
+      if job.borderSide>4 then
+        job.phase='tiles'
+      else
+        local side=job.borderSide
+        local horizontal=side<=2
+        local length=horizontal and sel.w or sel.h
+        local p=job.borderPos
+        if p>=length then
+          if job.borderStart~=nil then
+            local first=job.borderStart
+            local a,b,c,d
+            if side==1 then a,b,c,d=sel.x+first,sel.y,sel.x+p,sel.y
+            elseif side==2 then a,b,c,d=sel.x+first,sel.y+sel.h,sel.x+p,sel.y+sel.h
+            elseif side==3 then a,b,c,d=sel.x,sel.y+first,sel.x,sel.y+p
+            else a,b,c,d=sel.x+sel.w,sel.y+first,sel.x+sel.w,sel.y+p end
+            addOutlineLine(job,a,b,c,d)
+            job.borderStart=nil
+          end
+          job.borderSide=side+1
+          job.borderPos=0
+        else
+          local x,y
+          if side==1 then x,y=sel.x+p,sel.y
+          elseif side==2 then x,y=sel.x+p,sel.y+sel.h-1
+          elseif side==3 then x,y=sel.x,sel.y+p
+          else x,y=sel.x+sel.w-1,sel.y+p end
+          local selected=S.contains(sel,x,y)
+          if selected then
+            if job.borderStart==nil then job.borderStart=p end
+          elseif job.borderStart~=nil then
+            local first=job.borderStart
+            local a,b,c,d
+            if side==1 then a,b,c,d=sel.x+first,sel.y,sel.x+p,sel.y
+            elseif side==2 then a,b,c,d=sel.x+first,sel.y+sel.h,sel.x+p,sel.y+sel.h
+            elseif side==3 then a,b,c,d=sel.x,sel.y+first,sel.x,sel.y+p
+            else a,b,c,d=sel.x+sel.w,sel.y+first,sel.x+sel.w,sel.y+p end
+            addOutlineLine(job,a,b,c,d)
+            job.borderStart=nil
+          end
+          job.borderPos=p+1
+          job.scanned=job.scanned+1
+          remaining=remaining-1
+        end
+      end
+    else
+      local entry=job.keys[job.index]
+      if not entry then
+        job.done=true
+      else
+        local x,y=entry.tx*T+job.px,entry.ty*T+job.py
+        local inside=x>=sel.x and y>=sel.y
+          and x<sel.x+sel.w and y<sel.y+sel.h
+        if inside and select(1,entry.tile:getPixel(job.px,job.py))>0.5 then
+          -- Examina apenas os pixels da máscara positiva armazenada.
+          -- Em uma máscara invertida, esses pixels representam furos.
+          local inverted=sel.mask.inverted
+          if S.contains(sel,x,y-1)==inverted then
+            addOutlineLine(job,x,y,x+1,y)
+          end
+          if not job.done and S.contains(sel,x+1,y)==inverted then
+            addOutlineLine(job,x+1,y,x+1,y+1)
+          end
+          if not job.done and S.contains(sel,x,y+1)==inverted then
+            addOutlineLine(job,x,y+1,x+1,y+1)
+          end
+          if not job.done and S.contains(sel,x-1,y)==inverted then
+            addOutlineLine(job,x,y,x,y+1)
+          end
+        end
+        job.px=job.px+1
+        if job.px>=T then
+          job.px=0
+          job.py=job.py+1
+          if job.py>=T then
+            job.py=0
+            job.index=job.index+1
+          end
+        end
+        job.scanned=job.scanned+1
+        remaining=remaining-1
+      end
+    end
+  end
+  return job.done,job.lines
+end
+
 function S.validate(doc,sel)
   if sel==nil then return true end
   assert(type(sel)=='table' and int(sel.x,0,doc.w-1) and int(sel.y,0,doc.h-1)
