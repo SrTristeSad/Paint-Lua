@@ -1,0 +1,34 @@
+name: Verificacao Paint-Lua
+on:
+  push:
+    branches: [main, rebuild/ibis-shell]
+  pull_request:
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - name: Instalar Lua
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y lua5.4 xz-utils
+      - name: Preparar motor
+        run: sh scripts/prepare-core.sh
+      - name: Verificar sintaxe
+        run: |
+          luac5.4 -p main.lua
+          luac5.4 -p app/ibis_main.lua
+          luac5.4 -p app/paint_bridge.lua
+      - name: Smoke do motor
+        run: lua5.4 scripts/smoke-core.lua
+      - name: Smoke da integracao Ibis-Lua
+        run: lua5.4 tests/test_bridge_smoke.lua
+      - name: Testes de modelo da interface
+        env:
+          LUA_PATH: "vendor/Ibis-Lua/?.lua;vendor/Ibis-Lua/?/init.lua;./?.lua;./?/init.lua;;"
+        run: |
+          lua5.4 vendor/Ibis-Lua/tests/test_model.lua
+          lua5.4 vendor/Ibis-Lua/tests/test_canvas_presets.lua
+          lua5.4 vendor/Ibis-Lua/tests/test_viewport.lua
