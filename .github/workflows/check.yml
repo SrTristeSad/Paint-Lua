@@ -37,3 +37,6 @@ jobs:
         run: |
           love --version || true
           timeout 40s xvfb-run -a env PAINT_LUA_SMOKE=1 PAINT_LUA_SCREEN=editor love .
+
+      - name: Pincel e projeto reais no LÖVE
+        run: timeout 45s xvfb-run -a env PAINT_LUA_BRIDGE_E2E=1 love .
