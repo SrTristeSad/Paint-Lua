@@ -43,6 +43,15 @@ return function(check)
   local separated=assert(Sel.combine(doc,a,far,'intersect'))
   check('v0.36: interseção disjunta conserva máscara vazia',
     separated and not on(separated,0,0) and not on(separated,22,22))
+  local Brush=require('core.brush')
+  local noDraw=Doc.new(32,32,'Seleção vazia')
+  noDraw.selection=assert(Sel.combine(noDraw,
+    Sel.rect(noDraw,2,2,5,5),Sel.rect(noDraw,2,2,5,5),'subtract'))
+  Brush.dab(noDraw,noDraw.layers[noDraw.sel],noDraw.history,4,4,
+    {size=2,alpha=1,color={1,0,0},eraser=false,hardness=1,
+      selection=noDraw.selection})
+  check('v0.36: máscara vazia bloqueia pincel de verdade',
+    next(noDraw.layers[noDraw.sel].tiles)==nil)
   doc.selection=empty
   local emptyBytes=Project.encode(doc)
   local loadedEmpty=assert(Project.decode(emptyBytes))

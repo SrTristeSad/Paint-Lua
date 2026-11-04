@@ -617,3 +617,17 @@ assert(Selection.contains(combineBridge.doc.selection,22,22)
   'LÖVE v0.36: região combinada não persistiu')
 love.filesystem.remove(combineBridge.filename)
 print('PASS: LÖVE real v0.36: união, subtração, interseção, undo/redo e NPNT5')
+
+-- v0.36: seleção vazia não deve mostrar moldura enganosa nem pintar.
+local emptyModel=Model.new()
+emptyModel:open_gallery();emptyModel:open_new_canvas();emptyModel:create_canvas(64,64)
+local emptyBridge=Bridge.new()
+local emptyDoc=assert(emptyBridge:sync(emptyModel))
+local area=Selection.rect(emptyDoc,2,2,5,5)
+emptyDoc.selection=assert(Selection.combine(emptyDoc,area,area,'subtract'))
+assert(not Selection.contains(emptyDoc.selection,3,3) and
+  not Selection.contains(emptyDoc.selection,63,63),
+  'LÖVE v0.36: seleção vazia não bloqueou pintura')
+assert(pcall(emptyBridge.drawSelection,emptyBridge,0,0,1),
+  'LÖVE v0.36: desenho da máscara vazia falhou')
+print('PASS: LÖVE v0.36: seleção vazia sem moldura falsa')

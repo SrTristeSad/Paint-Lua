@@ -843,7 +843,10 @@ function Bridge:drawSelection(x,y,canvasScale)
     Transform.drawPreview(self.transform,x,y,canvasScale)
   end
   if sel and not self.transform then
-    if sel.kind=='polygon' then
+    if sel.kind=='wand' and not sel.mask.inverted
+      and next(sel.mask.tiles)==nil then
+      -- Máscara vazia: NÃO desenhar a moldura cheia do documento.
+    elseif sel.kind=='polygon' then
       local p=sel.points
       for i=1,#p do
         local a,b=p[i],p[i%#p+1]
