@@ -4,6 +4,7 @@
 -- modifica o documento (uma ação de desfazer/refazer).
 local Doc = require('core.doc')
 local Layers = require('core.layers')
+local Transform = require('core.transform')
 local Import = {MAX_PIXELS=2097152, MAX_SIDE=8192, MAX_BYTES=16*1024*1024}
 local SIGNATURE='\137PNG\r\n\26\n'
 local floor, min, max = math.floor, math.min, math.max
@@ -66,9 +67,29 @@ local function displayName(filename)
   return name
 end
 
+-- A mesma matemática de transformação usada pelo seletor (Transform).
+-- Nenhum método deste objeto toca no documento antes de Import.insert.
+function Import.preview(doc,pixels,filename)
+  assert(doc and doc.w and doc.h and pixels and pixels.getWidth and pixels.getHeight,
+    'documento ou PNG inválidos')
+  local w,h=pixels:getWidth(),pixels:getHeight()
+  assert(validSize(w,h),'PNG excede os limites')
+  return {source=pixels,filename=filename,x=floor((doc.w-w)/2),
+    y=floor((doc.h-h)/2),w=w,h=h,dx=0,dy=0,
+    scaleX=1,scaleY=1,angle=0,active=true}
+end
+function Import.adjust(session,dx,dy,scale,angle)
+  return Transform.set(session,session.dx+(dx or 0),session.dy+(dy or 0),
+    session.scaleX*(scale or 1),session.scaleY*(scale or 1),
+    session.angle+(angle or 0))
+end
+function Import.bounds(session) return Transform.bounds(session) end
+function Import.drawPreview(session,x,y) return Transform.drawPreview(session,x,y) end
+function Import.cancel(session) return Transform.cancel(session) end
+
 -- Posiciona a imagem no centro do canvas. Partes fora do documento são
 -- recortadas; pixels transparentes não criam tiles desnecessários.
-function Import.insert(doc, pixels, filename)
+function Import.insert(doc, pixels, filename, placement)
   if type(doc)~='table' or type(doc.w)~='number' or type(doc.h)~='number'
     or type(doc.layers)~='table' or not pixels or not pixels.getWidth
     or not pixels.getHeight or not pixels.getPixel then
@@ -78,11 +99,20 @@ function Import.insert(doc, pixels, filename)
   if not validSize(w,h) then
     return nil,'imagem PNG excede 2.097.152 pixels ou 8.192 por lado'
   end
-  local originX=floor((doc.w-w)/2)
-  local originY=floor((doc.h-h)/2)
-  local x0,y0=max(0,originX),max(0,originY)
-  local x1,y1=min(doc.w,originX+w),min(doc.h,originY+h)
+  local session=placement or Import.preview(doc,pixels,filename)
+  if not session or session.source~=pixels or not session.active then
+    return nil,'prévia de PNG inválida'
+  end
+  local ok,bounds=pcall(Transform.bounds,session)
+  if not ok then return nil,'transformação PNG inválida: '..tostring(bounds) end
+  local x0,y0=max(0,floor(bounds.x)),max(0,floor(bounds.y))
+  local x1,y1=min(doc.w,math.ceil(bounds.x+bounds.w)),
+      min(doc.h,math.ceil(bounds.y+bounds.h))
   if x1<=x0 or y1<=y0 then return nil,'a imagem ficou fora do canvas' end
+  -- Limite para a área rasterizada; a origem também foi validada.
+  if (x1-x0)*(y1-y0)>Import.MAX_PIXELS then
+    return nil,'área posicionada excede 2.097.152 pixels'
+  end
   local title='PNG: '..displayName(filename)
   local detached=Doc.newLayer(title)
   local marked,painted={},0
@@ -90,13 +120,17 @@ function Import.insert(doc, pixels, filename)
   local copied,reason=pcall(function()
     for y=y0,y1-1 do
       for x=x0,x1-1 do
-        local r,g,b,a=pixels:getPixel(x-originX,y-originY)
-        if a>0 then
-          local tx,ty=floor(x/Doc.TILE),floor(y/Doc.TILE)
-          local tile,key=Doc.getTile(detached,tx,ty,true)
-          tile:setPixel(x%Doc.TILE,y%Doc.TILE,r,g,b,a)
-          marked[key]=true
-          painted=painted+1
+        local sx,sy=Transform.inverse(session,x+0.5,y+0.5)
+        local ix,iy=floor(sx-session.x),floor(sy-session.y)
+        if ix>=0 and iy>=0 and ix<w and iy<h then
+          local r,g,b,a=pixels:getPixel(ix,iy)
+          if a>0 then
+            local tx,ty=floor(x/Doc.TILE),floor(y/Doc.TILE)
+            local tile,key=Doc.getTile(detached,tx,ty,true)
+            tile:setPixel(x%Doc.TILE,y%Doc.TILE,r,g,b,a)
+            marked[key]=true
+            painted=painted+1
+          end
         end
       end
     end

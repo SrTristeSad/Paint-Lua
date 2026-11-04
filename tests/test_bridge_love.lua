@@ -306,7 +306,10 @@ sourcePNG:setPixel(1,2,0.2,0.6,0.9,0.5)
 sourcePNG:setPixel(3,3,0.9,0.4,0.1,1)
 local pngBytes=sourcePNG:encode('png'):getString()
 assert(pngBridge:importPNGBytes(pngModel,pngBytes,'referencia.png'),
-  'importação PNG real falhou: '..tostring(pngBridge.status))
+  'prévia PNG real falhou: '..tostring(pngBridge.status))
+assert(#pngDoc.layers==1 and #pngDoc.history.undo==0,
+  'prévia PNG não deve alterar a pintura nem o histórico')
+assert(pngBridge:applyPNGImport(pngModel),'aplicar PNG real falhou')
 assert(#pngDoc.layers==2 and pngDoc.layers[1]==baseLayer and pngDoc.sel==2,
   'importação substituiu uma camada existente')
 local imported=pngDoc.layers[2]
@@ -326,7 +329,9 @@ assert(#pngDoc.layers==2 and #pngDoc.history.undo==undoCount,
 assert(love.filesystem.createDirectory('imports'))
 assert(love.filesystem.write('imports/ci-referencia.png',pngBytes))
 assert(pngBridge:importPNGFromFolder(pngModel,'ci-referencia.png'),
-  'importação pela pasta imports falhou')
+  'prévia pela pasta imports falhou')
+assert(#pngDoc.layers==2,'prévia da pasta alterou camadas')
+assert(pngBridge:applyPNGImport(pngModel),'aplicar PNG da pasta falhou')
 assert(#pngDoc.layers==3 and pngDoc.layers[3].name=='PNG: ci-referencia',
   'pasta imports não gerou nova camada')
 assert(not pngBridge:importPNGFromFolder(pngModel,'../segredo.png'),
@@ -340,3 +345,37 @@ assert(#pngBridge.doc.layers==3 and
   'pixels PNG não sobreviveram ao NPNT')
 love.filesystem.remove(pngBridge.filename)
 print('PASS: LÖVE v0.29: PNG real, pasta imports, RGBA, undo/redo e NPNT5')
+
+-- v0.30: PNG com prévia temporária, redimensionamento, cancelamento e NPNT5.
+local placementModel=Model.new()
+placementModel:open_gallery();placementModel:open_new_canvas();placementModel:create_canvas(64,64)
+local placementBridge=Bridge.new()
+local placementDoc=assert(placementBridge:sync(placementModel))
+local historyBefore=#placementDoc.history.undo
+assert(placementBridge:importPNGBytes(placementModel,pngBytes,'posicao.png'))
+assert(placementBridge.pngPreview and #placementDoc.layers==1 and
+  #placementDoc.history.undo==historyBefore,'prévia não pode modificar a imagem')
+assert(placementBridge:adjustPNGImport(5,2,1.5))
+assert(placementBridge.pngPreview.dx==5 and placementBridge.pngPreview.scaleX==1.5)
+assert(placementBridge:cancelPNGImport())
+assert(not placementBridge.pngPreview and #placementDoc.layers==1 and
+  #placementDoc.history.undo==historyBefore,'cancelar a prévia alterou o desenho')
+assert(placementBridge:importPNGBytes(placementModel,pngBytes,'posicao.png'))
+assert(placementBridge:adjustPNGImport(5,2,1.5))
+assert(placementBridge:applyPNGImport(placementModel),'aplicar o PNG redimensionado')
+assert(#placementDoc.layers==2 and #placementDoc.history.undo==historyBefore+1,
+  'importação transformada não foi uma ação')
+local placed=placementDoc.layers[2]
+local output=assert(placed.tiles['0,0'])
+assert(select(4,output:getPixel(31,32))==0,
+  'PNG redimensionado deveria mudar de posição')
+assert(select(4,output:getPixel(36,34))>0,
+  'PNG transformado não apareceu no destino esperado')
+assert(placementBridge:historyStep(placementModel,false) and #placementDoc.layers==1)
+assert(placementBridge:historyStep(placementModel,true) and #placementDoc.layers==2)
+placementBridge.filename='ci-paint-lua-v030.npnt'
+assert(placementBridge:save())
+assert(placementBridge:load(placementModel))
+assert(#placementBridge.doc.layers==2)
+love.filesystem.remove(placementBridge.filename)
+print('PASS: LÖVE v0.30: prévia PNG, zoom, mover, cancelar, undo e NPNT5')

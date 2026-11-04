@@ -1856,6 +1856,7 @@ require('tests.test_groups_ui_v025')(check)
 require('tests.test_thumbnail_reorder_v026')(check)
 require('tests.test_gallery_preview_v028')(check)
 require('tests.test_png_import_v029')(check)
+require('tests.test_png_placement_v030')(check)
 
 print(string.format("\n%d passou, %d falhou", passed, failed))
 if failed > 0 then os.exit(1) end

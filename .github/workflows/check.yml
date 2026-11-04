@@ -1,7 +1,7 @@
-name: Paint-Lua v0.29 — importação de PNG como camada
+name: Paint-Lua v0.30 — prévia, posicionamento e escala de PNG
 on:
   push:
-    branches: [main, feature/paint-v029-png-import]
+    branches: [main, feature/paint-v030-png-placement]
   pull_request:
 jobs:
   checks:
@@ -24,6 +24,7 @@ jobs:
           test -f src/png_export.lua
           test -f src/png_import.lua
           test -f tests/test_png_import_v029.lua
+          test -f tests/test_png_placement_v030.lua
           test -f tests/test_core.lua
           test -f assets/icons/png/paintbrush.png
           test ! -f .gitmodules
@@ -32,7 +33,7 @@ jobs:
         run: |
           lua5.4 tests/test_core.lua > core-results.log
           tail -n 5 core-results.log
-          grep -Eq '1050 passou, 0 falhou' core-results.log
+          grep -Eq '1066 passou, 0 falhou' core-results.log
       - name: Testes do modelo e navegação
         run: |
           lua5.4 scripts/smoke-core.lua
@@ -61,21 +62,21 @@ jobs:
       - name: Empacotar v0.29 com fontes e .bat para Windows
         shell: bash
         run: |
-          git archive --format=zip --output=Paint-Lua-v0.29-Windows.zip HEAD
-          unzip -tq Paint-Lua-v0.29-Windows.zip
-          unzip -Z1 Paint-Lua-v0.29-Windows.zip | grep -q '^core/selection.lua$'
-          unzip -Z1 Paint-Lua-v0.29-Windows.zip | grep -q '^core/transform.lua$'
-          unzip -Z1 Paint-Lua-v0.29-Windows.zip | grep -q '^core/thumbnail.lua$'
-          unzip -Z1 Paint-Lua-v0.29-Windows.zip | grep -q '^src/gallery_storage.lua$'
-          unzip -Z1 Paint-Lua-v0.29-Windows.zip | grep -q '^tests/test_gallery_storage.lua$'
-          unzip -Z1 Paint-Lua-v0.29-Windows.zip | grep -q '^tests/test_core.lua$'
-          unzip -Z1 Paint-Lua-v0.29-Windows.zip | grep -q '^src/png_import.lua$'
-          unzip -Z1 Paint-Lua-v0.29-Windows.zip | grep -q '^tests/test_png_import_v029.lua$'
-          unzip -Z1 Paint-Lua-v0.29-Windows.zip | grep -q '^testar.bat$'
-          sha256sum Paint-Lua-v0.29-Windows.zip
+          git archive --format=zip --output=Paint-Lua-v0.30-Windows.zip HEAD
+          unzip -tq Paint-Lua-v0.30-Windows.zip
+          unzip -Z1 Paint-Lua-v0.30-Windows.zip | grep -q '^core/selection.lua$'
+          unzip -Z1 Paint-Lua-v0.30-Windows.zip | grep -q '^core/transform.lua$'
+          unzip -Z1 Paint-Lua-v0.30-Windows.zip | grep -q '^core/thumbnail.lua$'
+          unzip -Z1 Paint-Lua-v0.30-Windows.zip | grep -q '^src/gallery_storage.lua$'
+          unzip -Z1 Paint-Lua-v0.30-Windows.zip | grep -q '^tests/test_gallery_storage.lua$'
+          unzip -Z1 Paint-Lua-v0.30-Windows.zip | grep -q '^tests/test_core.lua$'
+          unzip -Z1 Paint-Lua-v0.30-Windows.zip | grep -q '^src/png_import.lua$'
+          unzip -Z1 Paint-Lua-v0.30-Windows.zip | grep -q '^tests/test_png_import_v029.lua$'
+          unzip -Z1 Paint-Lua-v0.30-Windows.zip | grep -q '^testar.bat$'
+          sha256sum Paint-Lua-v0.30-Windows.zip
       - name: Disponibilizar ZIP
         uses: actions/upload-artifact@v4
         with:
-          name: Paint-Lua-v0.29-Windows
-          path: Paint-Lua-v0.29-Windows.zip
+          name: Paint-Lua-v0.30-Windows
+          path: Paint-Lua-v0.30-Windows.zip
           if-no-files-found: error

@@ -45,3 +45,7 @@ A galeria agora usa miniaturas PNG derivadas dos arquivos `.npnt` e exporta comp
 
 ### Atualização v0.29 — PNG como camada raster
 `src/png_import.lua` valida assinatura e IHDR, dimensões e tamanho antes de decodificar via `love.image.newImageData` com `FileData`. `PNGImport.insert` prepara tiles de uma camada desconectada antes de gravar um único snapshot estrutural (`core.layers.add`), preservando os pixels antigos e undo/redo. `Bridge:importPNGBytes` e `Bridge:importPNGFromFolder` conectam a API ao editor. A UI aceita `love.filedropped` (arraste do Explorador) e o painel Back > Importar PNG / Ctrl+I para arquivos de `imports/`. Não redimensiona a imagem, centraliza e recorta à tela; limites de 16 MiB de bytes e 2.097.152 pixels. Não há file-picker nativo nem JPEG/PSD. Continuar utilizando NPNT5; não reintroduzir submódulos. Testes mock em `tests/test_png_import_v029.lua` e reais em `tests/test_bridge_love.lua`. Consulte `docs/IMPORTACAO_PNG_v029.md`.
+
+
+## Evolução v0.30
+A importação PNG (v0.29) agora oferece prévia posicionável com escala/rotação antes do commit. A API `Import.insert` permanece disponível; a UI chama `Bridge:importPNGBytes` para iniciar a sessão e `Bridge:applyPNGImport` ou `Bridge:cancelPNGImport` para concluir. Geometria reusada de `core.transform`. O commit do PNG é uma única ação no histórico. Não reverter para importação imediata sem discussão com o criador. Teste no LÖVE e manual Windows ainda são prioridades.

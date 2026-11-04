@@ -1192,6 +1192,7 @@ local function editor_screen()
     -- Pixeis reais do motor, dentro da mesma transformacao do canvas da UI.
     paint:sync(state)
     paint:draw(-dw/2,-dh/2)
+    paint:drawPNGImport(-dw/2,-dh/2)
     draw_view_guides(dw,dh,actual_scale)
     paint:drawSelection(-dw/2,-dh/2,actual_scale)
     rgba(C.deep,0.22)
@@ -1298,6 +1299,28 @@ local function editor_screen()
             label(item[1],bx+1,oy+8,bw-2,'small','center',C.white)
             hit(bx,oy,bw,30,function() item[2]();notice(paint.status) end,
                 'transform_action_'..i)
+        end
+    end
+    -- PNG: prévia central com posição, zoom e rotação editáveis.
+    if paint.pngPreview then
+        local bw,gap=85,5
+        local ox=math.max(72,(W-(bw+gap)*6)/2)
+        local oy=H-158
+        rectangle(ox-7,oy-7,(bw+gap)*6+9,43,C.deep,0.96,6)
+        local buttons={
+            {'-15°',function() paint:adjustPNGImport(0,0,1,-math.pi/12) end},
+            {'+15°',function() paint:adjustPNGImport(0,0,1,math.pi/12) end},
+            {'- Zoom',function() paint:adjustPNGImport(0,0,1/1.1) end},
+            {'+ Zoom',function() paint:adjustPNGImport(0,0,1.1) end},
+            {'Cancelar',function() paint:cancelPNGImport() end},
+            {'Aplicar',function() paint:applyPNGImport(state) end},
+        }
+        for i,item in ipairs(buttons) do
+            local bx=ox+(i-1)*(bw+gap)
+            rectangle(bx,oy,bw,30,i==6 and C.blue or C.panel_head,0.95,4)
+            label(item[1],bx+1,oy+8,bw-2,'small','center',C.white)
+            hit(bx,oy,bw,30,function() item[2]();notice(paint.status) end,
+                'png_action_'..i)
         end
     end
     draw_size_controls()
@@ -2763,9 +2786,18 @@ function love.mousepressed(rx,ry,button)
     for i=#controls,1,-1 do
         local b=controls[i]
         if x>=b.x and x<=b.x+b.w and y>=b.y and y<=b.y+b.h then
+            if paint.pngPreview and not (b.key and
+                b.key:match('^png_action_')) then
+                notice('Aplique ou cancele a importação antes de usar outros controles')
+                return
+            end
             b.fn()
             return
         end
+    end
+    if state.screen=="editor" and not panel and paint.pngPreview then
+        paint:beginPNGDrag(state,view,preferences,scale,W,H,rx,ry)
+        return
     end
     if state.screen=="editor" and not panel
         and not love.keyboard.isDown("space")
@@ -2864,6 +2896,9 @@ function love.mousemoved(rx,ry,dx,dy)
         if love.keyboard.isDown("space") then view:pan_to(rx/scale,ry/scale)
         else view:end_pan() end
     end
+    if paint.pngDrag then
+        paint:movePNGImport(state,view,preferences,scale,W,H,rx,ry)
+    end
     if paint.transformDrag then
         paint:moveTransform(state,view,preferences,scale,W,H,rx,ry)
     end
@@ -2883,6 +2918,7 @@ function love.mousereleased(rx,ry,button)
             notice(paint.status)
         end
     end
+    paint.pngDrag=nil
     paint:finishTransformDrag()
     paint:finish(false)
     if paint.selectionDrag then
@@ -3002,6 +3038,7 @@ function love.textinput(t)
 end
 function love.keypressed(key)
     if key=="f12" then capture_requested=true;return end
+    if paint:pngImportKey(key) then notice(paint.status);return end
     if state.screen=='editor' and key=='i' and
         love.keyboard.isDown('lctrl','rctrl','lgui','rgui') then
         open_import_picker();return

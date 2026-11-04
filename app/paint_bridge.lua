@@ -36,6 +36,7 @@ end
 function Bridge.new()
   return setmetatable({doc=nil,modelDocument=nil,byId={},uiByLayer={},
     stroke=nil,job=nil,jobKind=nil,selectionDrag=nil,transform=nil,transformDrag=nil,
+    pngPreview=nil,pngDrag=nil,
     cache=nil,gpu={},thumbCache=setmetatable({}, {__mode='k'}),
     thumbRenders=0,maskMode=nil,maskOwner=nil,
     artworkId=nil,filename='meu-desenho.npnt',status='Paint-Lua v0.27 pronto'},Bridge)
@@ -76,6 +77,7 @@ function Bridge:sync(model)
     self:dropImages()
     self.selectionDrag=nil
     self:cancelTransform()
+    self:cancelPNGImport()
     self.maskMode,self.maskOwner=nil,nil
     self.artworkId=nil
     self.filename='meu-desenho.npnt'
@@ -254,7 +256,7 @@ end
 function Bridge:canEditStructure(model)
   local doc=self:sync(model)
   if not doc then self.status='Abra um documento';return nil end
-  if self.stroke or self.job or self.transform or self.selectionDrag then
+  if self.stroke or self.job or self.transform or self.selectionDrag or self.pngPreview then
     self.status='Finalize a operação atual antes de editar camadas';return nil
   end
   return doc
@@ -450,7 +452,7 @@ function Bridge:bucket(model,px,py,opacity)
 end
 
 function Bridge:press(model,view,prefs,uiScale,W,H,rx,ry,opacity)
-  if self.stroke or self.job or self.transform then return false end
+  if self.stroke or self.job or self.transform or self.pngPreview then return false end
   if model.active_tool~='brush' and model.active_tool~='eraser'
     and model.active_tool~='bucket' and model.active_tool~='eyedropper' then
     return false
@@ -577,7 +579,7 @@ end
 function Bridge:startTransform(model)
   if self.transform then return true end
   local doc=self:sync(model)
-  if not doc or self.stroke or self.job or self.selectionDrag then
+  if not doc or self.stroke or self.job or self.selectionDrag or self.pngPreview then
     self.status='Conclua a operação anterior';return false
   end
   if not doc.selection then
@@ -812,6 +814,7 @@ function Bridge:attachDocument(model,doc,id)
   assert(doc and doc.w and doc.h,'documento inválido')
   if id then GalleryStorage.artworkPath(id) end
   self:cancelTransform()
+  self:cancelPNGImport()
   self:finish(true)
   self:cancelJob()
   self.selectionDrag=nil
@@ -836,7 +839,7 @@ function Bridge:attachDocument(model,doc,id)
 end
 
 function Bridge:save()
-  if self.transform then return nil,'confirme ou cancele a transformação primeiro' end
+  if self.transform or self.pngPreview then return nil,'confirme ou cancele a prévia antes de salvar' end
   if not self.doc then return nil,'nenhum documento' end
   if self.job then return nil,'operação em andamento' end
   if self.selectionDrag then return nil,'finalize a seleção antes de salvar' end
@@ -861,6 +864,7 @@ end
 -- Importa o PNG em camada própria e registra uma única ação de histórico.
 -- A pré-validação, a decodificação e os tiles temporários precedem qualquer
 -- mutação da pilha. O NPNT original permanece intacto até o próximo salvar.
+-- A importação é uma sessão visual: nenhum pixel/undo muda até Aplicar.
 function Bridge:importPNGBytes(model,bytes,filename)
   local doc=self:canEditStructure(model)
   if not doc then return nil,self.status end
@@ -868,15 +872,97 @@ function Bridge:importPNGBytes(model,bytes,filename)
     self.status='Volte a Pintar pixels antes de importar PNG'
     return nil,self.status
   end
-  local ok,layer,count=pcall(PNGImport.fromBytes,doc,bytes,filename)
-  if not ok or not layer then
-    self.status='Importar PNG: '..tostring(ok and count or layer)
-    return nil,self.status
+  local pixels,reason=PNGImport.decode(bytes)
+  if not pixels then self.status='Importar PNG: '..tostring(reason);return nil,self.status end
+  local ok,session=pcall(PNGImport.preview,doc,pixels,filename)
+  if not ok then self.status='Importar PNG: '..tostring(session);return nil,self.status end
+  self.pngPreview=session
+  self.pngModel=model
+  self.pngDrag=nil
+  self.status='PNG em prévia: arraste, ajuste a escala ou confirme'
+  return true
+end
+
+function Bridge:cancelPNGImport()
+  self.pngDrag=nil
+  local session=self.pngPreview
+  if not session then return false end
+  PNGImport.cancel(session)
+  self.pngPreview=nil
+  self.pngModel=nil
+  self.status='Importação cancelada; pintura preservada'
+  return true
+end
+
+function Bridge:adjustPNGImport(dx,dy,scale,angle)
+  if not self.pngPreview then return false end
+  local ok,why=pcall(PNGImport.adjust,self.pngPreview,dx,dy,scale,angle)
+  if not ok then self.status='Ajuste do PNG: '..tostring(why);return false end
+  return true
+end
+
+function Bridge:applyPNGImport(model)
+  local session=self.pngPreview
+  if not session then return false end
+  local doc=self.doc
+  if not doc or self.modelDocument~=model.document then
+    self.status='Documento alterado durante a prévia'
+    return false
   end
+  local ok,layer,count=pcall(PNGImport.insert,doc,session.source,session.filename,session)
+  if not ok or not layer then
+    self.status='PNG: '..tostring(ok and count or layer)
+    return false
+  end
+  self:cancelPNGImport()
   self:refreshModel(model)
   self:dropImages()
   self.cache=Composite.newCache(doc,{maxTiles=96})
-  self.status='PNG importado: '..tostring(count)..' pixels (Ctrl+Z desfaz)'
+  self.status='PNG aplicado: '..tostring(count)..' pixels (Ctrl+Z desfaz)'
+  return true
+end
+
+function Bridge:drawPNGImport(x,y)
+  if self.pngPreview then PNGImport.drawPreview(self.pngPreview,x,y) end
+end
+
+function Bridge:beginPNGDrag(model,view,prefs,uiScale,W,H,rx,ry)
+  local s=self.pngPreview
+  if not s then return false end
+  local x,y=self:toCanvas(model,view,prefs,uiScale,W,H,rx,ry)
+  if not x then return false end
+  local b=PNGImport.bounds(s)
+  if x<b.x or y<b.y or x>b.x+b.w or y>b.y+b.h then return false end
+  self.pngDrag={x=x,y=y,dx=s.dx,dy=s.dy}
+  return true
+end
+
+function Bridge:movePNGImport(model,view,prefs,uiScale,W,H,rx,ry)
+  if not self.pngPreview or not self.pngDrag then return false end
+  local x,y=self:toCanvas(model,view,prefs,uiScale,W,H,rx,ry)
+  if not x then return false end
+  local drag=self.pngDrag
+  local session=self.pngPreview
+  local ok,err=pcall(Transform.set,session,
+    drag.dx+x-drag.x,drag.dy+y-drag.y,
+    session.scaleX,session.scaleY,session.angle)
+  if not ok then self.status=tostring(err);return false end
+  return true
+end
+
+function Bridge:pngImportKey(key)
+  if not self.pngPreview then return false end
+  if key=='escape' then self:cancelPNGImport();return true end
+  if key=='return' or key=='kpenter' then self:applyPNGImport(self.pngModel);return true end
+  if key=='left' then self:adjustPNGImport(-1,0);return true end
+  if key=='right' then self:adjustPNGImport(1,0);return true end
+  if key=='up' then self:adjustPNGImport(0,-1);return true end
+  if key=='down' then self:adjustPNGImport(0,1);return true end
+  if key=='q' then self:adjustPNGImport(0,0,1,-math.pi/12);return true end
+  if key=='r' then self:adjustPNGImport(0,0,1,math.pi/12);return true end
+  if key=='=' or key=='kp+' then self:adjustPNGImport(0,0,1.1);return true end
+  if key=='-' or key=='kp-' then self:adjustPNGImport(0,0,1/1.1);return true end
+  self.status='Aplique ou cancele a importação primeiro'
   return true
 end
 
@@ -913,7 +999,7 @@ end
 -- A exportação nunca modifica a pintura nem substitui um PNG existente.
 function Bridge:exportPNG(model)
   if not self.doc then return nil,'nenhum documento aberto' end
-  if self.transform or self.job or self.selectionDrag then
+  if self.transform or self.job or self.selectionDrag or self.pngPreview then
     return nil,'conclua ou cancele a operação antes de exportar'
   end
   self:finish(false)
@@ -942,7 +1028,7 @@ end
 
 function Bridge:historyStep(model,redo)
   if model.screen~='editor' then return false end
-  if self.transform then self.status='Confirme ou cancele a transformação antes do histórico';return false end
+  if self.transform or self.pngPreview then self.status='Confirme ou cancele a prévia antes do histórico';return false end
   if self.job then
     self.status='Finalize ou cancele o trabalho antes do histórico'
     return false
