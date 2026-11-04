@@ -1302,6 +1302,8 @@ local function editor_screen()
                 notice(paint.status)
             end,'transform_mode_'..item[2])
         end
+        label('Cantos: escala  |  Topo: giro',ox+343,filterY+8,190,
+            'tiny','left',C.white)
         local buttons={
             {'-15°',function() paint:adjustTransform(0,0,1,-math.pi/12) end},
             {'+15°',function() paint:adjustTransform(0,0,1,math.pi/12) end},

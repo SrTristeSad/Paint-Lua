@@ -1,4 +1,4 @@
-# Paint-Lua — Projeto único (v0.33)
+# Paint-Lua — Projeto único (v0.34)
 
 Editor experimental de pintura digital em Lua / LÖVE 11.5. A interface de Ibis-Lua e o núcleo de pintura v0.21 são **código-fonte do mesmo repositório**. Não há submódulos, download do Ibis-Lua na inicialização ou integração atual com DragonBones/Bono-Lua.
 
@@ -9,6 +9,19 @@ Editor experimental de pintura digital em Lua / LÖVE 11.5. A interface de Ibis-
 3. Execute **testar.bat** na pasta raiz. Não precisa de Git, Python, PowerShell ou conexão à internet para iniciar.
 
 Clone alternativo: git clone https://github.com/SrTristeSad/Paint-Lua.git (sem --recurse-submodules).
+
+## Novidade v0.34 — alças de transformação
+
+A ferramenta **Transformar** agora oferece controles no próprio canvas:
+**cantos** para redimensionar com o canto oposto fixo, **círculo acima da
+seleção** para girar com o mouse e **arraste dentro da moldura girada** para
+mover. As alças acompanham zoom/rotação/pan da visualização e mantêm tamanho
+constante em tela. Para seleções muito pequenas, as alças ficam ocultas para
+permitir arrastar um pixel; use os botões de zoom para fazê-las reaparecer.
+
+Os modos **Suave/Pixelado**, botões de ±15°, zoom, aplicar/cancelar, histórico
+e NPNT5 permanecem compatíveis. Consulte
+[docs/ALCAS_TRANSFORMACAO_v034.md](docs/ALCAS_TRANSFORMACAO_v034.md).
 
 ## Novidade v0.33 — transformação Suave/Pixelado de áreas selecionadas
 

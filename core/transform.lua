@@ -92,6 +92,34 @@ local function point(s,x,y)
   return cx+s.dx+u*cos(s.angle)-v*sin(s.angle),
     cy+s.dy+u*sin(s.angle)+v*cos(s.angle)
 end
+
+-- Pontos do retângulo efetivamente girado, usados tanto pelo desenho
+-- quanto pelo hit-test do mouse. A alça de giro fica 28 px DE TELA
+-- além da aresta superior, independentemente do zoom do canvas.
+function T.forward(s,x,y)
+  assert(s and s.active,'transformação encerrada')
+  return point(s,x,y)
+end
+function T.handles(s,canvasScale)
+  assert(s and s.active,'transformação encerrada')
+  assert(finite(canvasScale) and canvasScale>0,'escala de tela inválida')
+  local corners={
+    nw={s.x,s.y},ne={s.x+s.w,s.y},
+    se={s.x+s.w,s.y+s.h},sw={s.x,s.y+s.h},
+  }
+  local out={}
+  for name,localPoint in pairs(corners) do
+    local x,y=point(s,localPoint[1],localPoint[2])
+    out[name]={x=x,y=y}
+  end
+  local tx,ty=point(s,s.x+s.w/2,s.y)
+  local distance=28/canvasScale
+  out.top={x=tx,y=ty}
+  out.rotate={x=tx+sin(s.angle)*distance,
+    y=ty-cos(s.angle)*distance}
+  out.center={x=s.x+s.w/2+s.dx,y=s.y+s.h/2+s.dy}
+  return out
+end
 function T.bounds(s)
   assert(s and s.active,'transformação encerrada')
   local x0,y0,x1,y1=math.huge,math.huge,-math.huge,-math.huge
@@ -274,7 +302,7 @@ function T.commit(s)
   return count,newSel
 end
 
-function T.drawPreview(s,x,y)
+function T.drawPreview(s,x,y,canvasScale)
   if not s or not s.active or not love.graphics then return end
   local g=love.graphics
   local img=ensureImage(s)
@@ -287,9 +315,45 @@ function T.drawPreview(s,x,y)
   g.setColor(1,1,1,0.75)
   g.draw(img,-s.w/2,-s.h/2)
   g.pop()
-  local b=T.bounds(s)
-  g.setColor(0.25,0.84,1,1)
-  g.rectangle('line',x+b.x,y+b.y,b.w,b.h)
+  -- Diferentemente de bounds(), esta moldura acompanha a rotação real.
+  -- O raio das alças é dado em pixels de tela para não encolher no zoom.
+  local zoom=max(canvasScale or 1,0.001)
+  -- Compatibilidade com renderizadores mínimos usados em testes e ferramentas.
+  if not (g.setLineWidth and g.line and g.circle) then
+    local b=T.bounds(s)
+    g.setColor(0.12,0.80,1,1)
+    g.rectangle('line',x+b.x,y+b.y,b.w,b.h)
+    g.setColor(1,1,1,1)
+    return
+  end
+  local handles=T.handles(s,zoom)
+  g.setLineWidth(1.4/zoom)
+  g.setColor(0.12,0.80,1,1)
+  local order={'nw','ne','se','sw'}
+  for i=1,4 do
+    local a,b=handles[order[i]],handles[order[i%4+1]]
+    g.line(x+a.x,y+a.y,x+b.x,y+b.y)
+  end
+  if math.min(s.w*abs(s.scaleX),s.h*abs(s.scaleY))*zoom<28 then
+    g.setColor(0.56,0.94,1,1)
+    g.circle('line',x+handles.center.x,y+handles.center.y,6/zoom)
+    g.setColor(1,1,1,1)
+    return
+  end
+  g.line(x+handles.top.x,y+handles.top.y,
+    x+handles.rotate.x,y+handles.rotate.y)
+  for _,name in ipairs(order) do
+    local h=handles[name]
+    g.setColor(0.05,0.22,0.38,0.98)
+    g.circle('fill',x+h.x,y+h.y,7/zoom)
+    g.setColor(0.56,0.94,1,1)
+    g.circle('line',x+h.x,y+h.y,7/zoom)
+  end
+  local rot=handles.rotate
+  g.setColor(0.08,0.28,0.45,0.99)
+  g.circle('fill',x+rot.x,y+rot.y,9/zoom)
+  g.setColor(1,0.84,0.32,1)
+  g.circle('line',x+rot.x,y+rot.y,9/zoom)
   g.setColor(1,1,1,1)
 end
 return T
