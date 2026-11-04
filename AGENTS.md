@@ -68,3 +68,18 @@ Selection Area e por Ctrl+Shift+I (Ctrl+I ainda importa PNG).
 A rasterização inicial de retângulos/laços é limitada a 2 milhões de pixels;
 a reversão de máscaras invertidas lê no máximo 256 tiles para a bounding box.
 Consulte `docs/INVERSAO_SELECAO_v035.md` e a suíte de testes.
+
+### Atualização v0.36 — combinações booleanas
+
+`Selection.combine(doc,old,new,'replace'|'add'|'subtract'|'intersect')`
+produz máscaras esparsas NPNT5 com suporte a inversões anteriores,
+sem alterar as entradas de histórico. `nil` significa pintura irrestrita,
+portanto combinações vazias geram máscara explícita de zero pixels,
+jamais `nil`. A ponte expõe `Bridge:setSelectionMode` e
+`Bridge:combineSelection`; os três gestos (retângulo, laço e varinha)
+aplicam o modo capturado quando começaram. Selecionar tudo, Desmarcar e
+Inverter continuam comandos independentes. Limite: 2 milhões de pixels
+e 256 tiles candidatos por combinação. Ver
+`docs/COMBINACAO_SELECOES_v036.md`,
+`tests/test_selection_combine_v036.lua` e
+`PAINT_LUA_SELECTION_COMBINE_E2E=1 love .`.

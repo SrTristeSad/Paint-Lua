@@ -87,6 +87,8 @@ local transform_filter_e2e=os.getenv('PAINT_LUA_TRANSFORM_FILTER_E2E')=='1'
 local transform_filter_e2e_stage=0
 local transform_handles_e2e=os.getenv('PAINT_LUA_TRANSFORM_HANDLES_E2E')=='1'
 local transform_handles_e2e_stage=0
+local selection_combine_e2e=os.getenv('PAINT_LUA_SELECTION_COMBINE_E2E')=='1'
+local selection_combine_e2e_stage=0
 local gallery_e2e = os.getenv("PAINT_LUA_GALLERY_E2E") == "1"
 local gallery_e2e_stage = 0
 local gallery_persist_e2e=os.getenv('PAINT_LUA_GALLERY_PERSIST_E2E')
@@ -94,7 +96,7 @@ local gallery_persist_stage=0
 -- Autotestes/capturas não devem criar dados persistentes por acidente.
 local persistence_enabled=not (smoke or e2e or layer_e2e or
     settings_e2e or gallery_e2e or color_e2e or png_filter_e2e or transform_filter_e2e or
-    transform_handles_e2e or
+    transform_handles_e2e or selection_combine_e2e or
     os.getenv('PAINT_LUA_BRIDGE_E2E')=='1' or
     os.getenv('PAINT_LUA_GALLERY_STORAGE_E2E')=='1')
 local smoke_screen = os.getenv("PAINT_LUA_SCREEN") or "title"
@@ -1511,7 +1513,7 @@ function draw_editor_panel()
         x=math.max(63,math.min(W-w-5,x))
         y=math.max(3,math.min(H-h-54,y))
     elseif name=='selection' then
-        w=math.min(320,W-90);h=math.min(390,H-160)
+        w=math.min(320,W-90);h=math.min(456,H-160)
         x=W-w-22;y=58
     else
         w=math.min(320,W-90);h=math.min(330,H-160)
@@ -1552,13 +1554,32 @@ function draw_editor_panel()
                 panel=nil;state.active_panel=nil
             end,key)
         end
-        action(y+197,"Selecionar tudo",function() paint:selectAll(state) end,
+        label("Próxima seleção",x+15,y+190,w-30,"tiny","left",C.soft)
+        local modes={
+            {"Nova","replace"},{"Somar","add"},
+            {"Subtrair","subtract"},{"Interseção","intersect"},
+        }
+        local bw=(w-36)/2
+        for i,item in ipairs(modes) do
+            local mx=x+15+((i-1)%2)*(bw+6)
+            local my=y+209+math.floor((i-1)/2)*33
+            local selected=paint.selectionMode==item[2]
+            rectangle(mx,my,bw,29,selected and C.accent or C.panel_head,
+                selected and 0.90 or 0.83,6)
+            label(item[1],mx+2,my+7,bw-4,"small","center",C.white)
+            local mode=item[2]
+            hit(mx,my,bw,29,function()
+                paint:setSelectionMode(mode)
+                notice(paint.status)
+            end,'selection_mode_'..mode)
+        end
+        action(y+286,"Selecionar tudo",function() paint:selectAll(state) end,
             "selection_all")
-        action(y+240,"Inverter seleção",function() paint:invertSelection(state) end,
+        action(y+329,"Inverter seleção",function() paint:invertSelection(state) end,
             "selection_invert")
-        action(y+283,"Desmarcar",function() paint:clearSelection() end,
+        action(y+372,"Desmarcar",function() paint:clearSelection() end,
             "selection_clear")
-        label("Ctrl+A / Ctrl+D / Ctrl+Shift+I",x+12,y+335,w-24,
+        label("Ctrl+A / Ctrl+D / Ctrl+Shift+I",x+12,y+421,w-24,
             "tiny","center",C.soft)
     elseif name=="view" then
         local bx=x+12
@@ -2637,6 +2658,13 @@ function love.load()
         assert(w and h,"PAINT_LUA_E2E_RES deve ser largura x altura")
         local ok=love.window.setMode(tonumber(w),tonumber(h),{resizable=true})
         assert(ok,"Não foi possível configurar resolução de teste")
+    end
+    if selection_combine_e2e then
+        state:open_gallery();state:open_new_canvas();state:create_canvas(64,64)
+        local doc=assert(paint:sync(state))
+        doc.selection=require('core.selection').rect(doc,10,10,17,17)
+        state:set_tool('selection_rect')
+        set_panel('selection')
     end
     if transform_handles_e2e then
         state:open_gallery();state:open_new_canvas();state:create_canvas(100,100)
@@ -3871,6 +3899,75 @@ function love.update()
     end
     if gallery_e2e and #controls>0 then
         gallery_e2e_update()
+        return
+    end
+    if selection_combine_e2e and #controls>0 then
+        local S=require('core.selection')
+        local function dragRect(x0,y0,x1,y1)
+            local left=preferences.tool_position=='left' and 62 or 0
+            local right=preferences.tool_position=='right' and 75 or 34
+            local ds=math.min((W-left-right)/64,(H-160)/64,1.1)*view.zoom
+            local cx=left+(W-left-right)/2+view.pan_x
+            local cy=62+(H-160)/2+view.pan_y
+            local a=view.rotation
+            local function mouse(x,y)
+                local u,v=(x-32)*ds,(y-32)*ds
+                return (cx+u*math.cos(a)-v*math.sin(a))*scale,
+                    (cy+u*math.sin(a)+v*math.cos(a))*scale
+            end
+            local ax,ay=mouse(x0,y0)
+            local bx,by=mouse(x1,y1)
+            love.mousepressed(ax,ay,1)
+            love.mousemoved(bx,by,bx-ax,by-ay)
+            love.mousereleased(bx,by,1)
+        end
+        if selection_combine_e2e_stage==0 then
+            click_control('selection_mode_add')
+            assert(paint.selectionMode=='add','UI: modo Somar não mudou')
+            click_control('selection_tool_selection_rect')
+            assert(panel==nil,'UI: ferramenta não fechou painel')
+        elseif selection_combine_e2e_stage==1 then
+            dragRect(20,20,26,26)
+            assert(S.contains(paint.doc.selection,12,12) and
+                S.contains(paint.doc.selection,23,23) and
+                not S.contains(paint.doc.selection,5,5),
+                'UI: somar regiões pelo mouse falhou')
+            assert(#paint.doc.history.undo==1,'UI: somar deve ter um undo')
+            set_panel('selection')
+        elseif selection_combine_e2e_stage==2 then
+            click_control('selection_mode_subtract')
+            assert(paint.selectionMode=='subtract','UI: modo Subtrair não mudou')
+            love.keypressed('escape')
+        elseif selection_combine_e2e_stage==3 then
+            dragRect(11,11,14,14)
+            assert(not S.contains(paint.doc.selection,12,12)
+                and S.contains(paint.doc.selection,16,16)
+                and S.contains(paint.doc.selection,23,23),
+                'UI: subtração pelo mouse falhou')
+            assert(#paint.doc.history.undo==2,'UI: subtrair deve ter um undo')
+            set_panel('selection')
+        elseif selection_combine_e2e_stage==4 then
+            click_control('selection_mode_intersect')
+            assert(paint.selectionMode=='intersect','UI: modo Interseção não mudou')
+            love.keypressed('escape')
+        else
+            dragRect(21,21,24,24)
+            assert(S.contains(paint.doc.selection,22,22)
+                and not S.contains(paint.doc.selection,16,16)
+                and not S.contains(paint.doc.selection,12,12),
+                'UI: interseção pelo mouse falhou')
+            assert(#paint.doc.history.undo==3,'UI: interseção deve ter um undo')
+            assert(paint:historyStep(state,false)
+                and S.contains(paint.doc.selection,16,16),
+                'UI: undo da interseção falhou')
+            assert(paint:historyStep(state,true)
+                and not S.contains(paint.doc.selection,16,16),
+                'UI: redo da interseção falhou')
+            print('PASS: UI LÖVE v0.36: botões Somar/Subtrair/Interseção e mouse reais')
+            love.event.quit(0)
+            return
+        end
+        selection_combine_e2e_stage=selection_combine_e2e_stage+1
         return
     end
     if layer_e2e and #controls>0 then

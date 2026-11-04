@@ -1,4 +1,4 @@
-# Paint-Lua — Projeto único (v0.35)
+# Paint-Lua — Projeto único (v0.36)
 
 Editor experimental de pintura digital em Lua / LÖVE 11.5. A interface de Ibis-Lua e o núcleo de pintura v0.21 são **código-fonte do mesmo repositório**. Não há submódulos, download do Ibis-Lua na inicialização ou integração atual com DragonBones/Bono-Lua.
 
@@ -9,6 +9,30 @@ Editor experimental de pintura digital em Lua / LÖVE 11.5. A interface de Ibis-
 3. Execute **testar.bat** na pasta raiz. Não precisa de Git, Python, PowerShell ou conexão à internet para iniciar.
 
 Clone alternativo: git clone https://github.com/SrTristeSad/Paint-Lua.git (sem --recurse-submodules).
+
+## Novidade v0.36 — combinar seleções
+
+A seção **Selection Area** agora permite escolher como o próximo retângulo,
+laço ou clique da varinha interage com a seleção existente:
+
+- **Nova**: substitui a área anterior (comportamento das versões anteriores).
+- **Somar**: mantém a seleção anterior e acrescenta a nova região.
+- **Subtrair**: remove da seleção os pixels da nova região.
+- **Interseção**: mantém somente os pixels presentes nas duas regiões.
+
+O modo escolhido permanece ativo para os gestos seguintes e funciona com
+máscaras invertidas da v0.35. Cada operação aplicada é **um único passo
+de desfazer/refazer**. Pintura e pixels antigos permanecem intactos até
+o usuário pintar ou transformar a região. Arquivos NPNT5 preservam a
+máscara resultante sem alterar o formato.
+
+**Atenção:** uma combinação que resulta em zero pixels cria uma *seleção
+vazia real*, e não `nil` (que no Paint-Lua significa editar sem restrições).
+Se não havia seleção anterior, Somar inicia uma seleção nova; Subtrair e
+Interseção não mudam o documento. Operações que exigiriam avaliar mais de
+**2 milhões de pixels ou 256 tiles** são recusadas antes de modificar
+a seleção ou o histórico. Veja
+[docs/COMBINACAO_SELECOES_v036.md](docs/COMBINACAO_SELECOES_v036.md).
 
 ## Novidade v0.35 — inverter seleção
 
