@@ -34,3 +34,20 @@ jobs:
         run: timeout 45s xvfb-run -a env PAINT_LUA_SMOKE=1 PAINT_LUA_SCREEN=editor love .
       - name: Pintura real, undo/redo e NPNT
         run: timeout 45s xvfb-run -a env PAINT_LUA_BRIDGE_E2E=1 love .
+
+      - name: Montar pacote completo Windows
+        shell: bash
+        run: |
+          set -euo pipefail
+          git archive --format=zip --output=Paint-Lua-v0.22-Windows.zip HEAD
+          unzip -tq Paint-Lua-v0.22-Windows.zip
+          unzip -Z1 Paint-Lua-v0.22-Windows.zip | grep -q '^core/brush.lua$'
+          unzip -Z1 Paint-Lua-v0.22-Windows.zip | grep -q '^src/model.lua$'
+          unzip -Z1 Paint-Lua-v0.22-Windows.zip | grep -q '^testar.bat$'
+          sha256sum Paint-Lua-v0.22-Windows.zip
+      - name: Disponibilizar ZIP Windows
+        uses: actions/upload-artifact@v4
+        with:
+          name: Paint-Lua-v0.22-Windows
+          path: Paint-Lua-v0.22-Windows.zip
+          if-no-files-found: error
