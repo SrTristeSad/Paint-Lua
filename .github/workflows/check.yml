@@ -1,42 +1,36 @@
-name: Verificacao Paint-Lua
+name: Testes Paint-Lua unificado
 on:
   push:
-    branches: [main, rebuild/ibis-shell]
+    branches: [main, integrate/ibis-unified]
   pull_request:
 jobs:
-  smoke:
+  checks:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          submodules: true
-      - name: Instalar Lua
+      - name: Instalar Lua e LÖVE
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y lua5.4 xz-utils love xvfb
-      - name: Preparar motor
-        run: sh scripts/prepare-core.sh
-      - name: Verificar sintaxe
+          sudo apt-get install -y lua5.4 love xvfb
+      - name: Conferir codigo inteiramente local
+        shell: bash
         run: |
-          luac5.4 -p main.lua
-          luac5.4 -p app/ibis_main.lua
-          luac5.4 -p app/paint_bridge.lua
-      - name: Smoke do motor
-        run: lua5.4 scripts/smoke-core.lua
-      - name: Smoke da integracao Ibis-Lua
-        run: lua5.4 tests/test_bridge_smoke.lua
-      - name: Testes de modelo da interface
-        env:
-          LUA_PATH: "vendor/Ibis-Lua/?.lua;vendor/Ibis-Lua/?/init.lua;./?.lua;./?/init.lua;;"
+          test -f core/doc.lua
+          test -f src/model.lua
+          test -f assets/icons/png/paintbrush.png
+          test ! -f .gitmodules
+          while IFS= read -r f; do luac5.4 -p "$f"; done < <(find core app src tests -name '*.lua' -type f | sort)
+      - name: Smoke do nucleo e ponte
         run: |
-          lua5.4 vendor/Ibis-Lua/tests/test_model.lua
-          lua5.4 vendor/Ibis-Lua/tests/test_canvas_presets.lua
-          lua5.4 vendor/Ibis-Lua/tests/test_viewport.lua
-
-      - name: Inicializar UI no LÖVE com display virtual
+          lua5.4 scripts/smoke-core.lua
+          lua5.4 tests/test_bridge_smoke.lua
+      - name: Testes do modelo
         run: |
-          love --version || true
-          timeout 40s xvfb-run -a env PAINT_LUA_SMOKE=1 PAINT_LUA_SCREEN=editor love .
-
-      - name: Pincel e projeto reais no LÖVE
+          lua5.4 tests/test_model.lua
+          lua5.4 tests/test_canvas_presets.lua
+          lua5.4 tests/test_viewport.lua
+          lua5.4 tests/test_layer_properties.lua
+      - name: Iniciar interface LÖVE real
+        run: timeout 45s xvfb-run -a env PAINT_LUA_SMOKE=1 PAINT_LUA_SCREEN=editor love .
+      - name: Pintura real, undo/redo e NPNT
         run: timeout 45s xvfb-run -a env PAINT_LUA_BRIDGE_E2E=1 love .
