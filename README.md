@@ -10,6 +10,23 @@ Editor experimental de pintura digital em Lua / LÖVE 11.5. A interface de Ibis-
 
 Clone alternativo: git clone https://github.com/SrTristeSad/Paint-Lua.git (sem --recurse-submodules).
 
+## Revisão de integração v0.35–v0.39
+
+A revisão da linha de desenvolvimento identificou e corrigiu um caso
+de segurança da seleção: **inverter uma área que cobre o documento todo
+agora cria uma seleção vazia de verdade**. Anteriormente essa operação
+removia a seleção (`nil`), liberando a pintura em toda a obra. Assim,
+**Inverter** mantém o significado de complemento e **Desmarcar**
+(Ctrl+D) continua sendo o comando explícito para pintura irrestrita.
+
+A mesma revisão evita inicializar ou executar o shader das formigas
+quando não há nenhum pixel selecionado. Foram incluídos testes de
+inversão, combinação, pincel/balde, histórico, NPNT5 e renderização
+em LÖVE real. A correção integra o **PR #6**, sem abrir outro PR ou
+alterar a `main`.
+
+Detalhes e ordem de integração: [docs/REVISAO_INTEGRACAO_v039.md](docs/REVISAO_INTEGRACAO_v039.md).
+
 ## Novidade v0.39 — pausar animação dos contornos
 
 O editor oferece **Settings → Animar contorno da seleção** para
@@ -106,7 +123,7 @@ continua reservado à importação PNG.
 O comando não altera pixels, cria uma operação de histórico e é salvo em
 **NPNT5**. A inversão usa uma máscara esparsa, sem rasterizar todo o canvas.
 Inverter sem seleção seleciona tudo; inverter uma seleção retangular total
-desmarca. Por segurança, regiões iniciais retangulares ou laços com mais
+agora produz uma **seleção vazia**. Use Desmarcar para liberar a pintura. Por segurança, regiões iniciais retangulares ou laços com mais
 de **2 milhões de pixels** não podem ser invertidos de uma vez.
 
 Consulte [docs/INVERSAO_SELECAO_v035.md](docs/INVERSAO_SELECAO_v035.md).

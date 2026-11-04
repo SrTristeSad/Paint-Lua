@@ -132,3 +132,18 @@ restaurar preferências quanto depois de cada clique. O teste E2E
 preferências **isolado**, em duas execuções LÖVE. Manter `main`,
 NPNT1–NPNT5, histórico e seleção fora dessa preferência. Ver
 `docs/PAUSA_CONTORNOS_v039.md` e `tests/test_selection_pause_v039.lua`.
+
+### Revisão integrada da v0.39 (PR #6)
+
+Corrigido o invariante `nil` (sem seleção = pintar livremente) versus
+`Selection.empty(doc)` (zero pixels selecionáveis). `Selection.invert`
+nunca pode produzir `nil` ao inverter uma seleção de documento inteiro:
+retângulo integral e varinha invertida plena passam a máscara vazia,
+com histórico, NPNT5 e undo/redo válidos. `Desmarcar` permanece
+separado e é a única operação para limpar seleção deliberadamente.
+A renderização ignora máscaras positivas sem tiles antes de
+instanciar o shader; o arraste sobre uma seleção vazia segue visível.
+A regressão está em `tests/test_selection_contract_integration.lua`
+e no E2E real `tests/test_selection_contract_love.lua`.
+Não abrir mais PRs empilhados até revisão da cadeia #2→#3→#4→#5→#6;
+a `main` não foi alterada pela revisão.

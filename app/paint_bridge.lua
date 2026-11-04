@@ -848,13 +848,18 @@ function Bridge:drawSelection(x,y,canvasScale,seconds)
   local sel=self.doc.selection
   local drag=self.selectionDrag
   if not sel and not drag then return end
+  -- A ausência de tiles numa máscara positiva significa ZERO pixels
+  -- selecionados, não ausência de seleção. Não inicializar GPU à toa.
+  local emptyWand=sel and sel.kind=='wand' and not sel.mask.inverted
+    and next(sel.mask.tiles)==nil
+  if emptyWand and not drag and not self.transform then return end
   local g=love.graphics
   g.setLineWidth(1/math.max(canvasScale,0.01))
   g.setColor(0.96,0.30,0.20,0.95)
   if self.transform then
     Transform.drawPreview(self.transform,x,y,canvasScale)
   end
-  if sel and not self.transform then
+  if sel and not self.transform and not emptyWand then
     local now=seconds
     if now==nil then
       now=love.timer and love.timer.getTime() or os.clock()
@@ -864,10 +869,7 @@ function Bridge:drawSelection(x,y,canvasScale,seconds)
       else g.setColor(0.96,0.30,0.20,0.95) end
       -- A geometria é sempre a mesma da v0.37. Apenas as cores dos pixels
       -- de linha alternam na tela; nunca se inventam segmentos ou bboxes.
-      if sel.kind=='wand' and not sel.mask.inverted
-        and next(sel.mask.tiles)==nil then
-        -- Máscara vazia: não há contorno nem animação visível.
-      elseif sel.kind=='polygon' then
+      if sel.kind=='polygon' then
         local p=sel.points
         for i=1,#p do
           local a,b=p[i],p[i%#p+1]

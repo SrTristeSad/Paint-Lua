@@ -376,14 +376,23 @@ local function flood(doc,layer,seedX,seedY,tolerance,yieldEvery,maxPixels)
 end
 
 
+-- Uma seleção vazia NÃO é nil: nil significa pintar em todo o canvas.
+-- Retorna objeto imutável, serializado normalmente pelo NPNT5.
+function S.empty(doc)
+  assert(doc and int(doc.w,1,65536) and int(doc.h,1,65536),'documento inválido')
+  return {kind='wand',x=0,y=0,w=doc.w,h=doc.h,mask=Mask.new(0)}
+end
+
 -- Inverte regiões sem alocar máscara para o canvas inteiro.
 -- Usa o bit inverted já serializado pelo formato NPNT5.
 function S.invert(doc,sel)
   assert(doc and int(doc.w,1,65536) and int(doc.h,1,65536),'documento inválido')
   if not sel then return S.rect(doc,0,0,doc.w-1,doc.h-1) end
   S.validate(doc,sel)
+  -- Inverter 'tudo' deve bloquear a pintura, nunca limpar a seleção.
+  -- Caso especial também evita rasterizar um canvas inteiro.
   if (sel.kind==nil or sel.kind=='rect') and sel.x==0 and sel.y==0
-    and sel.w==doc.w and sel.h==doc.h then return nil end
+    and sel.w==doc.w and sel.h==doc.h then return S.empty(doc) end
   local mask
   if sel.kind=='wand' then
     -- Não modificar a máscara original: histórico usa objetos imutáveis.
@@ -411,7 +420,10 @@ function S.invert(doc,sel)
           end
         end
       end
-      if x1<0 then return nil end
+      if x1<0 then
+        -- Inversão de uma máscara 100% selecionada: zero pixels ativos.
+        return S.empty(doc)
+      end
       return {kind='wand',x=x0,y=y0,w=x1-x0+1,h=y1-y0+1,mask=mask}
     end
   else

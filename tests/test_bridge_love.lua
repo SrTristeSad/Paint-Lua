@@ -676,3 +676,5 @@ print('PASS: LÖVE real v0.37: contornos esparsos e invertidos na GPU')
 
 -- v0.38: módulo isolado para manter o limite de 200 locais da VM Lua.
 require('tests.test_selection_ants_love_v038')()
+-- v0.39: teste integrado isolado para não exceder o limite de locais Lua.
+require('tests.test_selection_contract_love')()

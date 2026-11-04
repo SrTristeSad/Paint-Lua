@@ -129,3 +129,14 @@ e só recompilada ao reativar. O campo opcional
 `animate_selection_outline=0|1` é aceito nos arquivos de preferências
 versão 1, mantendo os arquivos antigos válidos. Essa mudança visual
 não faz parte do NPNT nem do histórico do documento.
+
+### Revisão de integração da v0.39
+
+A combinação de seleções da v0.36 exige distinguir "máscara vazia"
+(`kind='wand'`, sem tiles, `inverted=false`) de ausência de seleção
+(`nil` = pintura irrestrita). Corrigimos a inversão de retângulo
+integral e máscara integral invertida: ambas devem resultar numa
+máscara vazia, nunca limpar a seleção. Isso inclui obras grandes,
+NPNT5 e undo/redo. O desenho ignora uma máscara vazia antes do shader,
+sem ocultar o arraste de uma seleção em andamento. Revisar a cadeia
+de PRs #2–#6 antes de novos recursos; não modificar `main` sem decisão.
