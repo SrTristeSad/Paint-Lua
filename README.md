@@ -38,11 +38,11 @@ Consulte [docs/GALERIA_PERSISTENTE_v027.md](docs/GALERIA_PERSISTENTE_v027.md) pa
 
 ## Novidade v0.29 — importar PNG como camada
 
-No editor, **arraste um arquivo `.png` do Explorador de Arquivos para a janela do Paint-Lua**. O programa cria uma camada acima da atual, com os pixels RGBA e a transparência originais, posicionada no centro do canvas. Nada do desenho anterior é apagado. **Ctrl+Z desfaz** a importação e **Ctrl+Y refaz**.
+No editor, **arraste um arquivo `.png` do Explorador de Arquivos para a janela do Paint-Lua**. Na v0.29 a importação criava imediatamente uma camada; **desde a v0.30 ela abre primeiro a prévia ajustável** descrita acima. A nova camada conserva RGBA e transparência e não apaga o desenho anterior. **Ctrl+Z desfaz** a importação aplicada e **Ctrl+Y refaz**.
 
 Também é possível usar **Back → Importar PNG** ou **Ctrl+I** para escolher arquivos colocados em `imports/` no diretório de dados do LÖVE (normalmente `%APPDATA%\LOVE\paint-lua\imports` no Windows). A lista pode ser atualizada no painel. **Não há diálogo nativo de arquivos**; arrastar do Explorador é o caminho mais direto.
 
-Para proteger memória, só são aceitos PNGs com até **16 MiB de arquivo**, **2.097.152 pixels** e **8.192 por lado**. Imagens maiores são recusadas sem alterar a obra. O PNG não é escalado: a parte fora do canvas é recortada. O original não é movido nem apagado, e a camada importada passa a integrar o `.npnt` ao salvar. Ainda não há importação de JPEG, PSD ou SVG. Veja [guia de importação](docs/IMPORTACAO_PNG_v029.md).
+Para proteger memória, só são aceitos PNGs com até **16 MiB de arquivo**, **2.097.152 pixels** e **8.192 por lado**. Imagens maiores são recusadas sem alterar a obra. Na v0.29 o PNG não era escalado; a v0.30 permite escala e rotação na prévia, com recorte nas bordas do canvas. O original não é movido nem apagado, e a camada importada passa a integrar o `.npnt` ao salvar. Ainda não há importação de JPEG, PSD ou SVG. Veja [guia de importação](docs/IMPORTACAO_PNG_v029.md).
 
 ## Novidade v0.28 — miniaturas reais e exportação PNG
 
@@ -51,7 +51,7 @@ Para proteger memória, só são aceitos PNGs com até **16 MiB de arquivo**, **
 - **Exportar PNG no editor:** abra **Back → Exportar PNG**. **Exportar pela galeria:** selecione uma única obra e use o ícone de download da barra superior. A galeria mostra o caminho completo do PNG gerado.
 - O PNG final preserva transparência RGBA, mas o limite inicial é de **4.194.304 pixels, até 8.192 por lado**. Exportações recebem novos nomes (`obra-2.png`, `obra-2-2.png` etc.) e **não sobrescrevem** anteriores.
 - Os PNGs são criados no diretório de dados do LÖVE, dentro da pasta `exports/`, **não ao lado do .bat**. No Windows, normalmente fica em `%APPDATA%\LOVE\paint-lua\exports`. O caminho exato é mostrado pelo aplicativo.
-- **Não há exportação JPEG, PSD ou importação de PNG** nesta etapa. Os arquivos originais continuam em `.npnt`.
+- **Na v0.28 não havia importação PNG; ela foi acrescentada na v0.29 e ganhou prévia na v0.30. Ainda não há exportação JPEG ou PSD.** Os arquivos originais continuam em `.npnt`.
 
 ## Situação funcional
 
