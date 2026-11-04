@@ -2863,7 +2863,8 @@ function love.mousepressed(rx,ry,button)
         local b=controls[i]
         if x>=b.x and x<=b.x+b.w and y>=b.y and y<=b.y+b.h then
             if paint.pngPreview and not (b.key and
-                (b.key:match('^png_action_') or b.key:match('^png_mode_'))) then
+                (b.key:match('^png_action_') or b.key:match('^png_mode_')
+                or b.key:match('^png_precision_'))) then
                 notice('Aplique ou cancele a importação antes de usar outros controles')
                 return
             end

@@ -35,3 +35,7 @@ Não existe transformação em objeto inteligente ou vetor após aplicar: é um 
 raster. Os limites de área permanecem em 1 milhão de pixels de origem e de
 destino. A suavização aumenta o tempo de CPU, especialmente em silhuetas
 complexas e grandes. Não declarar validação no Windows ou FPS sem medição real.
+
+**Correção adicional v0.33:** os botões de giro fino de PNG (−1°, +1°, Giro 0°)
+agora são aceitos mesmo enquanto a importação está em prévia; a proteção
+contra outras operações continua ativa.

@@ -183,3 +183,7 @@ Para continuar em outro chat: PROMPT_DO_PROJETO.md e AGENTS.md.
 - **Onde encontrar:** os PNGs aparecem na pasta de dados do LÖVE: `exports/obra-<id>.png` (Windows, geralmente `%APPDATA%\LOVE\paint-lua\exports`). Exportações posteriores recebem sufixos `-2`, `-3` etc.; nenhuma substitui uma exportação anterior.
 - **Segurança e limites:** PNG de resolução total limitado a **4.194.304 pixels** e lado máximo de 8.192 px, evitando alocação excessiva. Arquivos `.npnt` maiores podem continuar sendo abertos e editados; somente a exportação integral é recusada. A prévia mantém o tamanho máximo de 160 × 160 px. Não há sincronização em nuvem nem exportação JPEG/PSD nesta versão.
 - **Qualidade:** os testes puros do núcleo somam 1.029 verificações aprovadas. Teste de inicialização, persistência de miniaturas e exportação no LÖVE real acontece pela CI; teste manual no Windows ainda é necessário.
+
+**Correção adicional v0.33:** os botões de giro fino de PNG (−1°, +1°, Giro 0°)
+agora são aceitos mesmo enquanto a importação está em prévia; a proteção
+contra outras operações continua ativa.
