@@ -86,8 +86,7 @@ function S.contains(sel,x,y)
   if sel.kind=='polygon' then
     return polygonInside(sel,x+0.5,y+0.5)
   elseif sel.kind=='wand' then
-    local tile=sel.mask.tiles[floor(x/T)..','..floor(y/T)]
-    return tile~=nil and select(1,tile:getPixel(x%T,y%T))>0.5
+    return Mask.value(sel.mask,x,y)>0.5
   end
   return sel.kind==nil or sel.kind=='rect'
 end
@@ -137,7 +136,7 @@ function S.validate(doc,sel)
   elseif kind=='wand' then
     local mask=sel.mask
     assert(type(mask)=='table' and mask.default==0 and mask.enabled==true
-      and mask.inverted==false and type(mask.tiles)=='table',
+      and type(mask.inverted)=='boolean' and type(mask.tiles)=='table',
       'máscara de varinha inválida')
     local tiles=0
     for key,tile in pairs(mask.tiles) do
@@ -227,6 +226,63 @@ local function flood(doc,layer,seedX,seedY,tolerance,yieldEvery,maxPixels)
   selected.x=xMin;selected.y=yMin
   selected.w=xMax-xMin+1;selected.h=yMax-yMin+1
   return selected
+end
+
+
+-- Inverte regiões sem alocar máscara para o canvas inteiro.
+-- Usa o bit inverted já serializado pelo formato NPNT5.
+function S.invert(doc,sel)
+  assert(doc and int(doc.w,1,65536) and int(doc.h,1,65536),'documento inválido')
+  if not sel then return S.rect(doc,0,0,doc.w-1,doc.h-1) end
+  S.validate(doc,sel)
+  if (sel.kind==nil or sel.kind=='rect') and sel.x==0 and sel.y==0
+    and sel.w==doc.w and sel.h==doc.h then return nil end
+  local mask
+  if sel.kind=='wand' then
+    -- Não modificar a máscara original: histórico usa objetos imutáveis.
+    mask=Mask.new(0)
+    mask.tiles=sel.mask.tiles
+    mask.revisions=sel.mask.revisions
+    mask.inverted=not sel.mask.inverted
+    if not mask.inverted then
+      local x0,y0,x1,y1=doc.w,doc.h,-1,-1
+      local checked=0
+      for key,tile in pairs(mask.tiles) do
+        local tx,ty=Doc.parseKey(key)
+        checked=checked+1
+        if checked>256 then return nil,'Inversão limitada a 256 tiles' end
+        for y=0,T-1 do
+          local py=ty*T+y
+          if py<doc.h then
+            for x=0,T-1 do
+              local px=tx*T+x
+              if px<doc.w and select(1,tile:getPixel(x,y))>0.5 then
+                x0=min(x0,px);y0=min(y0,py)
+                x1=max(x1,px);y1=max(y1,py)
+              end
+            end
+          end
+        end
+      end
+      if x1<0 then return nil end
+      return {kind='wand',x=x0,y=y0,w=x1-x0+1,h=y1-y0+1,mask=mask}
+    end
+  else
+    if sel.w*sel.h>2000000 then
+      return nil,'Inversão limitada a 2 milhões de pixels da seleção original'
+    end
+    mask=Mask.new(0)
+    for y=sel.y,sel.y+sel.h-1 do
+      for x=sel.x,sel.x+sel.w-1 do
+        if S.contains(sel,x,y) then
+          local tile=Mask.getTile(mask,floor(x/T),floor(y/T),true)
+          tile:setPixel(x%T,y%T,1,1,1,1)
+        end
+      end
+    end
+    mask.inverted=true
+  end
+  return {kind='wand',x=0,y=0,w=doc.w,h=doc.h,mask=mask}
 end
 
 function S.wand(doc,layer,x,y,tolerance,opts)
