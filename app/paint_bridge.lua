@@ -14,6 +14,7 @@ local Groups = require('core.groups')
 local Thumbnail = require('core.thumbnail')
 local GalleryStorage = require('src.gallery_storage')
 local PNGExport=require('src.png_export')
+local PNGImport=require('src.png_import')
 
 local Bridge = {}
 Bridge.__index = Bridge
@@ -855,6 +856,58 @@ function Bridge:save()
     self.status=ok and ('Salvo: '..self.filename) or ('Erro: '..tostring(err))
   end
   return ok,err
+end
+
+-- Importa o PNG em camada própria e registra uma única ação de histórico.
+-- A pré-validação, a decodificação e os tiles temporários precedem qualquer
+-- mutação da pilha. O NPNT original permanece intacto até o próximo salvar.
+function Bridge:importPNGBytes(model,bytes,filename)
+  local doc=self:canEditStructure(model)
+  if not doc then return nil,self.status end
+  if self.maskMode then
+    self.status='Volte a Pintar pixels antes de importar PNG'
+    return nil,self.status
+  end
+  local ok,layer,count=pcall(PNGImport.fromBytes,doc,bytes,filename)
+  if not ok or not layer then
+    self.status='Importar PNG: '..tostring(ok and count or layer)
+    return nil,self.status
+  end
+  self:refreshModel(model)
+  self:dropImages()
+  self.cache=Composite.newCache(doc,{maxTiles=96})
+  self.status='PNG importado: '..tostring(count)..' pixels (Ctrl+Z desfaz)'
+  return true
+end
+
+function Bridge:importPNGFromFolder(model,filename)
+  if type(filename)~='string' or #filename<5 or #filename>120
+    or filename:find('[/\\%z]') or filename:find('..',1,true)
+    or not filename:lower():match('%.png$') then
+    self.status='Nome de arquivo PNG inválido'
+    return nil,self.status
+  end
+  local fs=love and love.filesystem
+  if not fs or not fs.read then
+    self.status='love.filesystem indisponível'
+    return nil,self.status
+  end
+  local path='imports/'..filename
+  local info=fs.getInfo and fs.getInfo(path)
+  if not info or info.type~='file' then
+    self.status='Arquivo PNG não encontrado em imports/'
+    return nil,self.status
+  end
+  if info.size and info.size>PNGImport.MAX_BYTES then
+    self.status='PNG maior que 16 MiB'
+    return nil,self.status
+  end
+  local ok,bytes,err=pcall(fs.read,path)
+  if not ok or type(bytes)~='string' then
+    self.status='Não foi possível ler PNG: '..tostring(ok and err or bytes)
+    return nil,self.status
+  end
+  return self:importPNGBytes(model,bytes,filename)
 end
 
 -- A exportação nunca modifica a pintura nem substitui um PNG existente.

@@ -294,3 +294,49 @@ assert(previewBridge:load(previewModel),'não reabriu ordem de camadas')
 assert(previewBridge.doc.layers[3].name==src.name,'NPNT5 alterou ordem das camadas')
 love.filesystem.remove(previewBridge.filename)
 print('PASS: LÖVE real v0.26: thumbnails GPU, máscaras, reorder, undo/redo, NPNT5')
+
+-- v0.29: importar PNG real (LÖVE decoder), adicionar camada, rollback e NPNT5.
+local pngModel=Model.new()
+pngModel:open_gallery();pngModel:open_new_canvas();pngModel:create_canvas(64,64)
+local pngBridge=Bridge.new()
+local pngDoc=assert(pngBridge:sync(pngModel))
+local baseLayer=pngDoc.layers[1]
+local sourcePNG=love.image.newImageData(4,4)
+sourcePNG:setPixel(1,2,0.2,0.6,0.9,0.5)
+sourcePNG:setPixel(3,3,0.9,0.4,0.1,1)
+local pngBytes=sourcePNG:encode('png'):getString()
+assert(pngBridge:importPNGBytes(pngModel,pngBytes,'referencia.png'),
+  'importação PNG real falhou: '..tostring(pngBridge.status))
+assert(#pngDoc.layers==2 and pngDoc.layers[1]==baseLayer and pngDoc.sel==2,
+  'importação substituiu uma camada existente')
+local imported=pngDoc.layers[2]
+local tilePNG=assert(imported.tiles['0,0'])
+local ir,ig,ib,ia=tilePNG:getPixel(31,32)
+assert(math.abs(ir-0.2)<0.008 and math.abs(ig-0.6)<0.008 and
+  math.abs(ib-0.9)<0.008 and math.abs(ia-0.5)<0.008,
+  'decodificação PNG não preservou RGBA corretamente')
+assert(pngBridge:historyStep(pngModel,false) and #pngDoc.layers==1,
+  'Ctrl+Z não retirou a imagem importada')
+assert(pngBridge:historyStep(pngModel,true) and #pngDoc.layers==2,
+  'Ctrl+Y não recuperou a imagem importada')
+local undoCount=#pngDoc.history.undo
+assert(not pngBridge:importPNGBytes(pngModel,'dados corrompidos','erro.png'))
+assert(#pngDoc.layers==2 and #pngDoc.history.undo==undoCount,
+  'arquivo inválido alterou a obra ou histórico')
+assert(love.filesystem.createDirectory('imports'))
+assert(love.filesystem.write('imports/ci-referencia.png',pngBytes))
+assert(pngBridge:importPNGFromFolder(pngModel,'ci-referencia.png'),
+  'importação pela pasta imports falhou')
+assert(#pngDoc.layers==3 and pngDoc.layers[3].name=='PNG: ci-referencia',
+  'pasta imports não gerou nova camada')
+assert(not pngBridge:importPNGFromFolder(pngModel,'../segredo.png'),
+  'importador aceitou caminho inseguro')
+love.filesystem.remove('imports/ci-referencia.png')
+pngBridge.filename='ci-paint-lua-v029.npnt'
+assert(pngBridge:save(),'NPNT não salvou camadas importadas')
+assert(pngBridge:load(pngModel),'NPNT não reabriu camadas importadas')
+assert(#pngBridge.doc.layers==3 and
+  math.abs(select(4,pngBridge.doc.layers[2].tiles['0,0']:getPixel(31,32))-0.5)<0.008,
+  'pixels PNG não sobreviveram ao NPNT')
+love.filesystem.remove(pngBridge.filename)
+print('PASS: LÖVE v0.29: PNG real, pasta imports, RGBA, undo/redo e NPNT5')

@@ -1,4 +1,4 @@
-# Paint-Lua — Projeto único (v0.28)
+# Paint-Lua — Projeto único (v0.29)
 
 Editor experimental de pintura digital em Lua / LÖVE 11.5. A interface de Ibis-Lua e o núcleo de pintura v0.21 são **código-fonte do mesmo repositório**. Não há submódulos, download do Ibis-Lua na inicialização ou integração atual com DragonBones/Bono-Lua.
 
@@ -27,6 +27,14 @@ A **My Gallery** agora persiste obras diferentes em arquivos NPNT separados, com
 O catálogo alterna entre dois índices validados, e cada obra mantém uma cópia de segurança anterior ao sobrescrever; o formato de projeto continua **NPNT1–NPNT5**. Ao iniciar sem catálogo, tenta importar o antigo `meu-desenho.npnt` sem apagá-lo. O repositório e o ZIP continuam completamente independentes do Ibis-Lua.
 
 Consulte [docs/GALERIA_PERSISTENTE_v027.md](docs/GALERIA_PERSISTENTE_v027.md) para limites e recuperação. **Ainda não existe galeria na nuvem nem exclusão definitiva.** As miniaturas reais de obras foram adicionadas na v0.28, além das miniaturas de camadas. Dados ficam no diretório de salvamento do LÖVE, não junto ao executável.
+
+## Novidade v0.29 — importar PNG como camada
+
+No editor, **arraste um arquivo `.png` do Explorador de Arquivos para a janela do Paint-Lua**. O programa cria uma camada acima da atual, com os pixels RGBA e a transparência originais, posicionada no centro do canvas. Nada do desenho anterior é apagado. **Ctrl+Z desfaz** a importação e **Ctrl+Y refaz**.
+
+Também é possível usar **Back → Importar PNG** ou **Ctrl+I** para escolher arquivos colocados em `imports/` no diretório de dados do LÖVE (normalmente `%APPDATA%\LOVE\paint-lua\imports` no Windows). A lista pode ser atualizada no painel. **Não há diálogo nativo de arquivos**; arrastar do Explorador é o caminho mais direto.
+
+Para proteger memória, só são aceitos PNGs com até **16 MiB de arquivo**, **2.097.152 pixels** e **8.192 por lado**. Imagens maiores são recusadas sem alterar a obra. O PNG não é escalado: a parte fora do canvas é recortada. O original não é movido nem apagado, e a camada importada passa a integrar o `.npnt` ao salvar. Ainda não há importação de JPEG, PSD ou SVG. Veja [guia de importação](docs/IMPORTACAO_PNG_v029.md).
 
 ## Novidade v0.28 — miniaturas reais e exportação PNG
 

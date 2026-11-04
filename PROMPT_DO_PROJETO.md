@@ -41,3 +41,7 @@ A decisão de prioridade foi implementar **salvamento de múltiplas obras sem nu
 
 ### Atualização v0.28
 A galeria agora usa miniaturas PNG derivadas dos arquivos `.npnt` e exporta composição PNG sem destruir as obras. `src/artwork_preview.lua` gera prévias por tiles sem alocar canvas inteiro; `src/png_export.lua` gera PNG até 4.194.304 pixels; `src/gallery_storage.lua` gerencia cache persistente por ID; `app/ibis_main.lua` oferece comandos de UI. Testes em `tests/test_gallery_preview_v028.lua`, `tests/test_core.lua`, e na CI de persistência da galeria. Não afirmar que suporta JPEG/PSD ou que o desempenho no Windows foi medido.
+
+
+### Atualização v0.29 — PNG como camada raster
+`src/png_import.lua` valida assinatura e IHDR, dimensões e tamanho antes de decodificar via `love.image.newImageData` com `FileData`. `PNGImport.insert` prepara tiles de uma camada desconectada antes de gravar um único snapshot estrutural (`core.layers.add`), preservando os pixels antigos e undo/redo. `Bridge:importPNGBytes` e `Bridge:importPNGFromFolder` conectam a API ao editor. A UI aceita `love.filedropped` (arraste do Explorador) e o painel Back > Importar PNG / Ctrl+I para arquivos de `imports/`. Não redimensiona a imagem, centraliza e recorta à tela; limites de 16 MiB de bytes e 2.097.152 pixels. Não há file-picker nativo nem JPEG/PSD. Continuar utilizando NPNT5; não reintroduzir submódulos. Testes mock em `tests/test_png_import_v029.lua` e reais em `tests/test_bridge_love.lua`. Consulte `docs/IMPORTACAO_PNG_v029.md`.

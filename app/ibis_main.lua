@@ -10,6 +10,7 @@ local CanvasPresets = require("src.canvas_presets")
 local Gallery = require("src.gallery")
 local GalleryStorage = require("src.gallery_storage")
 local PNGExport = require("src.png_export")
+local PNGImport = require("src.png_import")
 local BrushCatalog = require("src.brush_catalog")
 local EditorPreferences = require("src.editor_preferences")
 local ColorState = require("src.color_state")
@@ -45,6 +46,8 @@ local gallery_dialog=nil
 local gallery_input=""
 local gallery_input_replace=true
 local active_artwork_id=nil
+local import_files={}
+local import_page=1
 -- Cache LRU de prévias; geração de arquivos antigos ocorre de forma incremental.
 local gallery_thumb_cache={}
 local gallery_thumb_pending={}
@@ -266,6 +269,33 @@ local function save_preferences()
 end
 local function current()
     return state.screen=="editor"
+end
+local function list_import_files()
+    if love.filesystem.createDirectory then
+        pcall(love.filesystem.createDirectory,'imports')
+    end
+    local ok,files=pcall(love.filesystem.getDirectoryItems,'imports')
+    if not ok or type(files)~='table' then return {} end
+    local available={}
+    for _,filename in ipairs(files) do
+        if type(filename)=='string' and #filename<=120 and #filename>=5
+            and not filename:find('[/\\%z]') and not filename:find('..',1,true)
+            and filename:lower():match('%.png$') then
+            available[#available+1]=filename
+        end
+    end
+    table.sort(available)
+    return available
+end
+local function open_import_picker()
+    if state.screen~='editor' then
+        notice('Abra uma obra para importar PNG')
+        return
+    end
+    import_files=list_import_files()
+    import_page=1
+    panel='import_png'
+    state.active_panel=nil
 end
 local picker_hue=0
 local function set_panel(name)
@@ -1352,6 +1382,14 @@ function draw_editor_panel()
             x=65
         end
         y=math.max(7,math.min(58,H-h-80))
+    elseif name=='back' then
+        w=math.min(330,W-90)
+        h=math.min(392,H-125)
+        x=W-w-22;y=58
+    elseif name=='import_png' then
+        w=math.min(390,W-90)
+        h=math.min(390,H-160)
+        x=W-w-22;y=58
     elseif name=="settings" then
         w=math.min(438,W-90)
         h=math.min(476,H-145)
@@ -1400,7 +1438,7 @@ function draw_editor_panel()
         back="Back",view="View Menu",grid_settings="Grid Settings",
         settings="Settings",selection="Selection Area",
         stabilizer="Stabilizer",shape="Shape",ruler="Ruler",material="Material",
-        text="Text"}
+        text="Text",import_png="Importar PNG"}
     draw_panel_box(x,y,w,h,titles[name] or name)
     if name=="selection" then
         local options={
@@ -2336,6 +2374,38 @@ function draw_editor_panel()
                 end
             end,"tool_choice_"..key)
         end
+    elseif name=='import_png' then
+        label('Arraste um PNG para a janela ou copie para:',x+14,y+43,w-28,
+            'tiny','center',C.white)
+        label('imports/ (pasta de dados do LÖVE)',x+14,y+64,w-28,
+            'tiny','center',C.soft)
+        local listCount=math.min(4, #import_files-(import_page-1)*4)
+        if #import_files==0 then
+            label('Nenhum PNG em imports/',x+12,y+114,w-24,
+                'small','center',C.white)
+        end
+        for i=1,listCount do
+            local filename=import_files[(import_page-1)*4+i]
+            local labelName=#filename>28 and (filename:sub(1,25)..'...') or filename
+            local yy=y+94+(i-1)*42
+            plain_button(x+12,yy,w-24,37,labelName,function()
+                local ok,err=paint:importPNGFromFolder(state,filename)
+                notice(ok and paint.status or ('PNG: '..tostring(err)))
+                if ok then panel=nil;state.active_panel=nil end
+            end,false,'import_png_file_'..i)
+        end
+        local pages=math.max(1,math.ceil(#import_files/4))
+        local bottom=y+h-50
+        plain_button(x+10,bottom,(w-32)/3,35,'<',function()
+            import_page=math.max(1,import_page-1)
+        end,false,'import_png_prev')
+        plain_button(x+16+(w-32)/3,bottom,(w-32)/3,35,'Atualizar',function()
+            import_files=list_import_files()
+            import_page=math.min(import_page,math.max(1,math.ceil(#import_files/4)))
+        end,false,'import_png_refresh')
+        plain_button(x+22+(w-32)*2/3,bottom,(w-32)/3,35,'>',function()
+            import_page=math.min(pages,import_page+1)
+        end,false,'import_png_next')
     elseif name=="back" then
         label("Back",x+20,y+69,w-40,"normal","center",C.white)
         plain_button(x+20,y+127,w-40,42,"Back to My Gallery",back_to_gallery,true)
@@ -2348,6 +2418,8 @@ function draw_editor_panel()
                 notice('PNG em '..love.filesystem.getSaveDirectory()..'/'..path)
             else notice('PNG: '..tostring(err)) end
         end,false,'editor_export_png')
+        plain_button(x+20,y+300,w-40,32,'Importar PNG',open_import_picker,
+            false,'editor_import_png')
         hit(x+20,y+191,w-40,42,function()
             set_panel("settings")
         end,"back_settings")
@@ -2652,6 +2724,37 @@ function love.draw()
     if capture_requested then capture_requested=false;queue_capture() end
 end
 
+-- Arquivo externo: LÖVE libera um File real através do sistema operacional.
+-- Permite importar diretamente do Explorer sem copiar para a sandbox.
+function love.filedropped(file)
+    if not current() then
+        notice('Abra uma obra antes de arrastar um PNG')
+        return
+    end
+    local name=(file.getFilename and file:getFilename() or 'imagem.png')
+    if type(name)~='string' or not name:lower():match('%.png$') then
+        notice('Só arquivos PNG podem ser importados')
+        return
+    end
+    local opened,why=pcall(file.open,file,'r')
+    if not opened or not why then notice('Falha ao abrir o arquivo');return end
+    local ok,bytes=pcall(function()
+        local length=file:getSize()
+        if not length or length>PNGImport.MAX_BYTES or length<33 then
+            error('PNG muito grande ou vazio (limite: 16 MiB)')
+        end
+        return file:read()
+    end)
+    pcall(file.close,file)
+    if not ok or type(bytes)~='string' then
+        notice('Importar PNG: '..tostring(bytes))
+        return
+    end
+    local imported,err=paint:importPNGBytes(state,bytes,name)
+    notice(imported and paint.status or ('PNG: '..tostring(err)))
+    if imported then panel=nil;state.active_panel=nil end
+end
+
 function love.mousepressed(rx,ry,button)
     if button~=1 then return end
     layer_press=nil
@@ -2899,6 +3002,10 @@ function love.textinput(t)
 end
 function love.keypressed(key)
     if key=="f12" then capture_requested=true;return end
+    if state.screen=='editor' and key=='i' and
+        love.keyboard.isDown('lctrl','rctrl','lgui','rgui') then
+        open_import_picker();return
+    end
     if paint:transformKey(state,key) then notice(paint.status);return end
     if key=="escape" and paint.job then
         paint:cancelJob()

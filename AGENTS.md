@@ -28,3 +28,7 @@ Miniaturas reais de camadas/máscaras com cache de revisões (`core/thumbnail.lu
 
 ### Atualização v0.28
 A galeria agora usa miniaturas PNG derivadas dos arquivos `.npnt` e exporta composição PNG sem destruir as obras. `src/artwork_preview.lua` gera prévias por tiles sem alocar canvas inteiro; `src/png_export.lua` gera PNG até 4.194.304 pixels; `src/gallery_storage.lua` gerencia cache persistente por ID; `app/ibis_main.lua` oferece comandos de UI. Testes em `tests/test_gallery_preview_v028.lua`, `tests/test_core.lua`, e na CI de persistência da galeria. Não afirmar que suporta JPEG/PSD ou que o desempenho no Windows foi medido.
+
+
+### v0.29 — Importação PNG
+`src/png_import.lua` converte PNG para camada raster em memória antes de alterar o documento, cria uma ação de histórico e preserva a origem. `Bridge:importPNGBytes`/`importPNGFromFolder` integram; a UI oferece arrastar arquivo e Back > Importar PNG / Ctrl+I. Preserve validação de tamanho/assinatura, proteção de caminho, alpha, undo/redo e compatibilidade NPNT5. Rode `texlua tests/test_core.lua` e CI com `love .` (LÖVE 11.5). A integração não significa suporte a JPEG/PSD ou validação no Windows.
