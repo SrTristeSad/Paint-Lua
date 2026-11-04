@@ -89,6 +89,9 @@ local transform_handles_e2e=os.getenv('PAINT_LUA_TRANSFORM_HANDLES_E2E')=='1'
 local transform_handles_e2e_stage=0
 local selection_combine_e2e=os.getenv('PAINT_LUA_SELECTION_COMBINE_E2E')=='1'
 local selection_combine_e2e_stage=0
+local selection_outline_e2e=os.getenv('PAINT_LUA_SELECTION_OUTLINE_E2E')=='1'
+local selection_outline_e2e_stage=0
+local selection_outline_e2e_cache=nil
 local gallery_e2e = os.getenv("PAINT_LUA_GALLERY_E2E") == "1"
 local gallery_e2e_stage = 0
 local gallery_persist_e2e=os.getenv('PAINT_LUA_GALLERY_PERSIST_E2E')
@@ -96,7 +99,7 @@ local gallery_persist_stage=0
 -- Autotestes/capturas não devem criar dados persistentes por acidente.
 local persistence_enabled=not (smoke or e2e or layer_e2e or
     settings_e2e or gallery_e2e or color_e2e or png_filter_e2e or transform_filter_e2e or
-    transform_handles_e2e or selection_combine_e2e or
+    transform_handles_e2e or selection_combine_e2e or selection_outline_e2e or
     os.getenv('PAINT_LUA_BRIDGE_E2E')=='1' or
     os.getenv('PAINT_LUA_GALLERY_STORAGE_E2E')=='1')
 local smoke_screen = os.getenv("PAINT_LUA_SCREEN") or "title"
@@ -2659,6 +2662,20 @@ function love.load()
         local ok=love.window.setMode(tonumber(w),tonumber(h),{resizable=true})
         assert(ok,"Não foi possível configurar resolução de teste")
     end
+    if selection_outline_e2e then
+        state:open_gallery();state:open_new_canvas();state:create_canvas(1024,1024)
+        local doc=assert(paint:sync(state))
+        local mask=require('core.mask').new(0)
+        local tile=require('core.mask').getTile(mask,0,0,true)
+        for py=70,72 do
+            for px=70,72 do tile:setPixel(px,py,1,1,1,1) end
+        end
+        mask.inverted=true
+        doc.selection={kind='wand',x=0,y=0,w=1024,h=1024,mask=mask}
+        view.zoom=1.4
+        view.rotation=0.25
+        view.pan_x,view.pan_y=17,-12
+    end
     if selection_combine_e2e then
         state:open_gallery();state:open_new_canvas();state:create_canvas(64,64)
         local doc=assert(paint:sync(state))
@@ -3899,6 +3916,34 @@ function love.update()
     end
     if gallery_e2e and #controls>0 then
         gallery_e2e_update()
+        return
+    end
+    if selection_outline_e2e and #controls>0 then
+        local cache=paint.selectionOutline
+        assert(cache and cache.job,'UI v0.37: contorno não foi iniciado na GPU')
+        if selection_outline_e2e_stage==0 then
+            if not cache.job.done then return end
+            assert(not cache.job.truncated and #cache.job.lines==8,
+                'UI v0.37: borda invertida e furo não foram calculados')
+            local border,hole=false,false
+            for _,edge in ipairs(cache.job.lines) do
+                if edge[1]==0 and edge[2]==0
+                    and edge[3]==1024 and edge[4]==0 then border=true end
+                if edge[1]==70 and edge[2]==70
+                    and edge[3]==73 and edge[4]==70 then hole=true end
+            end
+            assert(border and hole,'UI v0.37: falta borda ou furo')
+            selection_outline_e2e_cache=cache
+            view.zoom=2.1
+            view.rotation=-0.38
+            view.pan_x,view.pan_y=-13,21
+            selection_outline_e2e_stage=1
+        else
+            assert(paint.selectionOutline==selection_outline_e2e_cache,
+                'UI v0.37: zoom/rotação/pan invalidaram contorno sem necessidade')
+            print('PASS: UI LÖVE v0.37: contorno de máscara inversa sob zoom/pan/rotação')
+            love.event.quit(0)
+        end
         return
     end
     if selection_combine_e2e and #controls>0 then

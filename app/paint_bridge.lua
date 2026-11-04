@@ -854,17 +854,20 @@ function Bridge:drawSelection(x,y,canvasScale)
       end
     elseif sel.kind=='wand' then
       if not self.selectionOutline or self.selectionOutline.selection~=sel then
-        self.selectionOutline={selection=sel,segments=Selection.outline(sel)}
+        -- Regiões pequenas seguem imediatas; as extensas são processadas em
+        -- lotes, sem inventar molduras para seleções descontínuas/invertidas.
+        local simple=sel.w*sel.h<=16384 and
+          Selection.outline(sel,16384,8192) or nil
+        self.selectionOutline={selection=sel,segments=simple,
+          job=not simple and Selection.startOutline(sel,{maxSegments=8192}) or nil}
       end
-      local segments=self.selectionOutline.segments
-      if segments then
-        for _,edge in ipairs(segments) do
-          g.line(x+edge[1],y+edge[2],x+edge[3],y+edge[4])
-        end
-      else
-        -- Fallback para áreas imensas: só a moldura; o interior continua
-        -- sendo a máscara raster exata usada pelo pincel e pelo balde.
-        g.rectangle('line',x+sel.x,y+sel.y,sel.w,sel.h)
+      local cache=self.selectionOutline
+      if cache.job and not cache.job.done then
+        Selection.stepOutline(cache.job,8192)
+      end
+      local segments=cache.job and cache.job.lines or cache.segments
+      for _,edge in ipairs(segments or {}) do
+        g.line(x+edge[1],y+edge[2],x+edge[3],y+edge[4])
       end
     else
       g.rectangle('line',x+sel.x,y+sel.y,sel.w,sel.h)
