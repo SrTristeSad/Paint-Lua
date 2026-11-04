@@ -9,7 +9,7 @@
 - Integre ferramentas gradualmente sem substituir o núcleo. A v0.22 usa Fill.newJob para balde, amostragem do compositor para conta-gotas e Alpha Lock em Lua. Confira compatibilidade em mudanças de pincel.
 
 - A v0.23 adicionou `core/selection.lua` com retângulo, laço e varinha mágica, integrados ao `app/paint_bridge.lua` e painel superior de seleção. Preserve máscaras e roundtrip NPNT5.
-- Rode `texlua tests/test_core.lua` (870 casos) e os testes da UI; diferencie mocks de LÖVE real.
+- Rode `texlua tests/test_core.lua` (1.140 casos na v0.33) e os testes da UI; diferencie mocks de LÖVE real.
 
 - v0.24: `core/transform.lua` realiza recortar/colar raster com preview antes do commit;
   `core/history.lua` suporta histórico combinado de pixels+seleção. Não quebrar undo único
@@ -42,3 +42,14 @@ A galeria agora usa miniaturas PNG derivadas dos arquivos `.npnt` e exporta comp
 ## Atualização v0.32 — importação PNG
 
 A rasterização suave de PNGs com rotação oblíqua aplica antialias por subamostragem com acumulação de RGB premultiplicada por alfa (`src/png_import.lua`). A importação pixelada e a transformação de seleções permanecem inalteradas. A UI expõe −1°, +1° e reset de giro; validar via `tests/test_png_rotation_aa_v032.lua`, E2E no LÖVE e documentação `docs/ROTACAO_PNG_v032.md`.
+
+## Atualização v0.33 — suavização de transformações de seleção
+
+`core/transform.lua` implementa `Transform.setInterpolation(s, 'smooth'|'pixelated')` e
+`Transform.begin(...,{interpolation='smooth'})`. A API antiga continua pixelada;
+`Bridge:startTransform` inicia Suave e a UI permite mudar para Pixelado. O
+resultado raster e a máscara da seleção são aplicados como uma só ação do
+histórico, incluindo undo/redo. O algoritmo bilinear usa RGB premultiplicado
+por alfa e cobertura 4x4 nos contornos; manter a proteção de 1 milhão de pixels.
+Testes em `tests/test_transform_smooth_v033.lua` e E2E com
+`PAINT_LUA_TRANSFORM_FILTER_E2E=1 love .`. Não confundir com filtros PNG.

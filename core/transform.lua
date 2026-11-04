@@ -1,6 +1,6 @@
--- Transformação raster NÃO destrutiva até confirmar (v0.24).
--- Recorta a seleção da camada ativa, prevê o resultado e aplica como um
--- único gesto no histórico. Reamostragem nearest-neighbor (sem antialias).
+-- Transformação raster com prévia não destrutiva (v0.24–v0.33).
+-- Sessão em modo Pixelado (compatibilidade) ou Suave (bilinear premultiplied
+-- com cobertura subpixel). A aplicação é um único gesto no histórico.
 local Doc=require('core.doc')
 local Selection=require('core.selection')
 local Mask=require('core.mask')
@@ -38,6 +38,8 @@ end
 
 function T.begin(doc,layer,selection,opts)
   opts=opts or {}
+  assert(opts.interpolation==nil or opts.interpolation=='smooth' or
+    opts.interpolation=='pixelated','interpolação desconhecida')
   assert(doc and type(doc.layers)=='table' and type(layer)=='table','documento/camada inválidos')
   Hist.assertUnlocked(doc.history)
   assert(doc.history.stroke==nil,'termine a pincelada antes de transformar')
@@ -63,7 +65,15 @@ function T.begin(doc,layer,selection,opts)
   end
   return {doc=doc,layer=layer,selection=selection,source=source,
     x=selection.x,y=selection.y,w=w,h=h,hasPixels=occupied,
-    dx=0,dy=0,scaleX=1,scaleY=1,angle=0,active=true}
+    dx=0,dy=0,scaleX=1,scaleY=1,angle=0,active=true,
+    interpolation=opts.interpolation or 'pixelated'}
+end
+
+function T.setInterpolation(s,mode)
+  assert(s and s.active,'transformação encerrada')
+  assert(mode=='smooth' or mode=='pixelated','interpolação desconhecida')
+  s.interpolation=mode
+  return mode
 end
 
 function T.set(s,dx,dy,scaleX,scaleY,angle)
@@ -118,8 +128,75 @@ local function setPixel(s,x,y,r,g,b,a)
   Doc.markDirty(layer,key)
 end
 
--- Uma seleção movida vira uma máscara raster exata (inclusive laços e varinha).
--- Sua máscara é modificada somente em variável temporária até o commit.
+-- Amostragem bilinear em RGBA pré-multiplicado: pixels transparentes
+-- nunca introduzem RGB escuro ou de cores estranhas no contorno.
+-- u/v são coordenadas relativas à borda superior esquerda do ImageData.
+local function bilinear(img,w,h,u,v)
+  local ix,iy=floor(u-0.5),floor(v-0.5)
+  local fx,fy=u-0.5-ix,v-0.5-iy
+  local x0,x1=max(0,min(w-1,ix)),max(0,min(w-1,ix+1))
+  local y0,y1=max(0,min(h-1,iy)),max(0,min(h-1,iy+1))
+  local r00,g00,b00,a00=img:getPixel(x0,y0)
+  local r10,g10,b10,a10=img:getPixel(x1,y0)
+  local r01,g01,b01,a01=img:getPixel(x0,y1)
+  local r11,g11,b11,a11=img:getPixel(x1,y1)
+  local w00,w10=(1-fx)*(1-fy),fx*(1-fy)
+  local w01,w11=(1-fx)*fy,fx*fy
+  local a=a00*w00+a10*w10+a01*w01+a11*w11
+  if a<=0 then return 0,0,0,0 end
+  return (r00*a00*w00+r10*a10*w10+r01*a01*w01+r11*a11*w11)/a,
+    (g00*a00*w00+g10*a10*w10+g01*a01*w01+g11*a11*w11)/a,
+    (b00*a00*w00+b10*a10*w10+b01*a01*w01+b11*a11*w11)/a,a
+end
+
+-- Retorna RGBA, e também a cobertura da SELEÇÃO (separada da opacidade).
+-- Em regiões internas, uma amostra bilinear é suficiente. Próximo a bordas
+-- oblíquas/irregulares, 4x4 subamostras evitam serrilhados sem reamostrar
+-- todo um canvas grande 16 vezes.
+local function smoothPixel(s,x,y)
+  local sel=s.selection
+  local sx,sy=T.inverse(s,x+0.5,y+0.5)
+  local u,v=sx-s.x,sy-s.y
+  local c,si=abs(cos(s.angle)),abs(sin(s.angle))
+  local padU=(c+si)/(2*abs(s.scaleX))
+  local padV=(c+si)/(2*abs(s.scaleY))
+  if u < -padU or v < -padV or u > s.w+padU or v > s.h+padV then
+    return 0,0,0,0,0
+  end
+  local aroundEdge=(u<padU or u>s.w-padU or v<padV or v>s.h-padV)
+  if not aroundEdge and (sel.kind=='wand' or sel.kind=='polygon') then
+    local ix,iy=floor(sx),floor(sy)
+    local center=Selection.contains(sel,ix,iy)
+    aroundEdge = Selection.contains(sel,ix-1,iy)~=center or
+      Selection.contains(sel,ix+1,iy)~=center or
+      Selection.contains(sel,ix,iy-1)~=center or
+      Selection.contains(sel,ix,iy+1)~=center
+  end
+  local oblique=abs(sin(s.angle*2))>1e-8
+  local aligned=(abs(s.scaleX)==1 and abs(s.scaleY)==1 and
+    s.dx==floor(s.dx) and s.dy==floor(s.dy) and not oblique)
+  -- Transformação por um número inteiro de pixels conserva RGB/alpha exatos.
+  local n=(aroundEdge and not aligned) and 4 or 1
+  local pr,pg,pb,alpha,coverage=0,0,0,0,0
+  for iy=0,n-1 do
+    for ix=0,n-1 do
+      local ux,uy=T.inverse(s,x+(ix+0.5)/n,y+(iy+0.5)/n)
+      local tx,ty=ux-s.x,uy-s.y
+      if tx>=0 and ty>=0 and tx<s.w and ty<s.h
+        and Selection.contains(sel,floor(ux),floor(uy)) then
+        coverage=coverage+1
+        local r,g,b,a=bilinear(s.source,s.w,s.h,tx,ty)
+        alpha=alpha+a
+        pr=pr+r*a;pg=pg+g*a;pb=pb+b*a
+      end
+    end
+  end
+  if alpha<=0 then return 0,0,0,0,coverage/(n*n) end
+  return pr/alpha,pg/alpha,pb/alpha,alpha/(n*n),coverage/(n*n)
+end
+
+-- Uma seleção movida vira uma máscara raster (inclusive laços e varinha).
+-- A máscara e o resultado permanecem temporários até o commit.
 function T.commit(s)
   assert(s and s.active,'transformação encerrada')
   local doc,layer,sel=s.doc,s.layer,s.selection
@@ -140,14 +217,22 @@ function T.commit(s)
   local writes={}
   for y=y0,y1-1 do
     for x=x0,x1-1 do
-      local sx,sy=T.inverse(s,x+0.5,y+0.5)
-      local ix,iy=floor(sx),floor(sy)
-      if ix>=sel.x and iy>=sel.y and ix<sel.x+s.w and iy<sel.y+s.h
-        and Selection.contains(sel,ix,iy) then
+      local r,g,b,a,coverage
+      if s.interpolation=='smooth' then
+        r,g,b,a,coverage=smoothPixel(s,x,y)
+      else
+        local sx,sy=T.inverse(s,x+0.5,y+0.5)
+        local ix,iy=floor(sx),floor(sy)
+        if ix>=sel.x and iy>=sel.y and ix<sel.x+s.w and iy<sel.y+s.h
+          and Selection.contains(sel,ix,iy) then
+          r,g,b,a=s.source:getPixel(ix-sel.x,iy-sel.y)
+          coverage=1
+        end
+      end
+      if coverage and coverage>0 then
         local m=Mask.getTile(selectionMask,floor(x/TILE),floor(y/TILE),true)
         m:setPixel(x%TILE,y%TILE,1,1,1,1)
         bx0=min(bx0,x);by0=min(by0,y);bx1=max(bx1,x);by1=max(by1,y)
-        local r,g,b,a=s.source:getPixel(ix-sel.x,iy-sel.y)
         if a>0 then writes[#writes+1]={x,y,r,g,b,a} end
       end
     end

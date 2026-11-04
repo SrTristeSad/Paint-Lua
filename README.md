@@ -1,4 +1,4 @@
-# Paint-Lua — Projeto único (v0.32)
+# Paint-Lua — Projeto único (v0.33)
 
 Editor experimental de pintura digital em Lua / LÖVE 11.5. A interface de Ibis-Lua e o núcleo de pintura v0.21 são **código-fonte do mesmo repositório**. Não há submódulos, download do Ibis-Lua na inicialização ou integração atual com DragonBones/Bono-Lua.
 
@@ -9,6 +9,31 @@ Editor experimental de pintura digital em Lua / LÖVE 11.5. A interface de Ibis-
 3. Execute **testar.bat** na pasta raiz. Não precisa de Git, Python, PowerShell ou conexão à internet para iniciar.
 
 Clone alternativo: git clone https://github.com/SrTristeSad/Paint-Lua.git (sem --recurse-submodules).
+
+## Novidade v0.33 — transformação Suave/Pixelado de áreas selecionadas
+
+A ferramenta **Transformar** (selecione retângulo, laço ou varinha e escolha
+**Transformar**) agora tem **Qualidade → Suave / Pixelado** acima dos botões de
+ângulo, escala, Cancelar e Aplicar. A interface começa em **Suave**.
+
+- **Suave:** interpolação bilinear com RGBA pré-multiplicado e cobertura subpixel
+  nas bordas de seleções deslocadas, redimensionadas e rotacionadas; evita halos
+  de pixels transparentes e reduz serrilhado dos contornos oblíquos.
+- **Pixelado:** conserva o algoritmo nearest-neighbor da v0.24, adequado para
+  pixel art ou para obter resultados compatíveis com a versão anterior.
+- **Aplicar/Enter:** move os pixels e a seleção em **uma única ação de histórico**.
+  **Cancelar/Esc:** não modifica a obra. O filtro é somente desta sessão, não
+  do pincel ou da importação PNG.
+
+A API `Transform.begin` **permanece Pixelado por padrão** para não mudar scripts
+existentes; a ponte da interface habilita Suave explicitamente. O formato
+continua **NPNT5**, sem alteração de compatibilidade.
+
+**Limites:** não há escolha de interpolação persistida como propriedade de camada,
+nem transformação vetorial; a ação final ainda é raster. Áreas de origem e
+destino seguem limitadas a **1 milhão de pixels** e suavização exige mais CPU.
+Windows, tablet e desempenho em documentos grandes ainda precisam de verificação
+manual. [Guia técnico v0.33](docs/TRANSFORMACAO_SUAVE_v033.md).
 
 ## Novidade v0.32 — antialias de rotação e giro fino
 
@@ -121,7 +146,8 @@ os tiles originais até escolher **Aplicar**.
 - **Cancelar** (ou **Esc**): encerra a prévia mantendo os pixels intactos.
 - **Setas**: deslocam 1 pixel; **Q/R**: giram 15°; **+/−**: alteram a escala.
 
-**Limitações:** transformação usa amostragem *nearest-neighbor*, sem interpolação suave,
+**Limitações:** a v0.24 usava somente *nearest-neighbor*; a v0.33
+acrescentou Suave/Pixelado e manteve o padrão antigo para a API. A ferramenta
 movimenta apenas a camada ativa e não preserva uma entidade vetorial/flutuante entre sessões.
 O commit fica limitado a **1 milhão de pixels de origem e destino** para proteger memória e CPU.
 Nenhum formato novo é necessário: o resultado raster e a máscara da seleção usam NPNT5.

@@ -83,13 +83,15 @@ local layer_e2e = os.getenv('PAINT_LUA_LAYER_E2E') == '1'
 local layer_e2e_stage = 0
 local png_filter_e2e=os.getenv('PAINT_LUA_PNG_FILTER_E2E')=='1'
 local png_filter_e2e_stage=0
+local transform_filter_e2e=os.getenv('PAINT_LUA_TRANSFORM_FILTER_E2E')=='1'
+local transform_filter_e2e_stage=0
 local gallery_e2e = os.getenv("PAINT_LUA_GALLERY_E2E") == "1"
 local gallery_e2e_stage = 0
 local gallery_persist_e2e=os.getenv('PAINT_LUA_GALLERY_PERSIST_E2E')
 local gallery_persist_stage=0
 -- Autotestes/capturas não devem criar dados persistentes por acidente.
 local persistence_enabled=not (smoke or e2e or layer_e2e or
-    settings_e2e or gallery_e2e or color_e2e or png_filter_e2e or
+    settings_e2e or gallery_e2e or color_e2e or png_filter_e2e or transform_filter_e2e or
     os.getenv('PAINT_LUA_BRIDGE_E2E')=='1' or
     os.getenv('PAINT_LUA_GALLERY_STORAGE_E2E')=='1')
 local smoke_screen = os.getenv("PAINT_LUA_SCREEN") or "title"
@@ -1287,6 +1289,19 @@ local function editor_screen()
         local ox=math.max(72,(W-(bw+gap)*6)/2)
         local oy=H-158
         rectangle(ox-7,oy-7,(bw+gap)*6+9,43,C.deep,0.96,6)
+        local mode=paint.transform.interpolation or 'pixelated'
+        local filterY=oy-46
+        rectangle(ox-7,filterY-5,(bw+gap)*6+9,38,C.deep,0.96,6)
+        label('Qualidade',ox+5,filterY+8,90,'tiny','left',C.white)
+        for _,item in ipairs({{'Suave','smooth'},{'Pixelado','pixelated'}}) do
+            local bx=ox+(item[2]=='smooth' and 110 or 225)
+            rectangle(bx,filterY,109,28,mode==item[2] and C.blue or C.panel_head,0.97,4)
+            label(item[1],bx+3,filterY+7,103,'small','center',C.white)
+            hit(bx,filterY,109,28,function()
+                paint:setTransformInterpolation(item[2])
+                notice(paint.status)
+            end,'transform_mode_'..item[2])
+        end
         local buttons={
             {'-15°',function() paint:adjustTransform(0,0,1,-math.pi/12) end},
             {'+15°',function() paint:adjustTransform(0,0,1,math.pi/12) end},
@@ -2613,6 +2628,19 @@ function love.load()
         local ok=love.window.setMode(tonumber(w),tonumber(h),{resizable=true})
         assert(ok,"Não foi possível configurar resolução de teste")
     end
+    if transform_filter_e2e then
+        state:open_gallery();state:open_new_canvas();state:create_canvas(64,64)
+        local doc=assert(paint:sync(state))
+        local layer=doc.layers[doc.sel]
+        local tile,key=require('core.doc').getTile(layer,0,0,true)
+        tile:setPixel(30,30,1,0,0,1)
+        tile:setPixel(31,30,0,0,1,1)
+        require('core.doc').markDirty(layer,key)
+        doc.selection=require('core.selection').rect(doc,30,30,31,30)
+        state:set_tool('transform')
+        assert(paint:startTransform(state))
+        assert(paint:adjustTransform(0,0,2,0))
+    end
     if png_filter_e2e then
         -- Teste visual real do controle, sem criar um projeto persistente.
         state:open_gallery();state:open_new_canvas();state:create_canvas(64,64)
@@ -3695,6 +3723,32 @@ function love.update()
     if smoke and capture_done then
         if capture_error then error("Screenshot: "..capture_error) end
         love.event.quit(0)
+    end
+    if transform_filter_e2e and #controls>0 then
+        if transform_filter_e2e_stage==0 then
+            assert(paint.transform and paint.transform.interpolation=='smooth',
+                'seleção deve iniciar com modo suave')
+            click_control('transform_mode_pixelated')
+            assert(paint.transform.interpolation=='pixelated',
+                'clicar Pixelado não atualizou a sessão')
+            transform_filter_e2e_stage=1
+        else
+            click_control('transform_mode_smooth')
+            assert(paint.transform.interpolation=='smooth',
+                'clicar Suave não atualizou a sessão')
+            click_control('transform_action_6')
+            assert(paint.transform==nil and #paint.doc.history.undo==1,
+                'Aplicar transformação suave deve fazer um único gesto')
+            local tile=assert(paint.doc.layers[paint.doc.sel].tiles['0,0'])
+            local r,_,b,a=tile:getPixel(30,30)
+            assert(r>0.70 and r<0.80 and b>0.20 and b<0.30 and a>0.99,
+                'o botão Suave não aplicou bilinear nos pixels reais')
+            assert(paint:historyStep(state,false), 'UI suave: desfazer não funcionou')
+            assert(paint:historyStep(state,true), 'UI suave: refazer não funcionou')
+            print('PASS: interface LÖVE v0.33: filtros Suave/Pixelado, pixels, undo/redo')
+            love.event.quit(0)
+        end
+        return
     end
     if png_filter_e2e and #controls>0 then
         if png_filter_e2e_stage==0 then

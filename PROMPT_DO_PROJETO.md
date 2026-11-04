@@ -62,3 +62,15 @@ seleção ou do canvas, nem reescrever o núcleo.
 ## Atualização v0.32 — importação PNG
 
 A rasterização suave de PNGs com rotação oblíqua aplica antialias por subamostragem com acumulação de RGB premultiplicada por alfa (`src/png_import.lua`). A importação pixelada e a transformação de seleções permanecem inalteradas. A UI expõe −1°, +1° e reset de giro; validar via `tests/test_png_rotation_aa_v032.lua`, E2E no LÖVE e documentação `docs/ROTACAO_PNG_v032.md`.
+
+## Atualização v0.33 — ferramenta Transformar com dois filtros
+
+Agora a transformação de seleções retangulares, laços e varinhas oferece
+**Suave** (bilinear RGBA + cobertura subpixel) e **Pixelado** (nearest de
+compatibilidade). A UI começa suave; chamadas diretas antigas a
+`Transform.begin` continuam pixeladas. Aplicar confirma pixels e seleção em um
+único undo/redo. Cancelar não modifica tiles. O NPNT5 não mudou.
+Consulte `docs/TRANSFORMACAO_SUAVE_v033.md`,
+`tests/test_transform_smooth_v033.lua` e `tests/test_bridge_love.lua`.
+A bateria local da v0.33 passou em 1.140 verificações simuladas; testar a
+integração no LÖVE real via CI e manualmente no Windows.

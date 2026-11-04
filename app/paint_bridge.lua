@@ -588,10 +588,19 @@ function Bridge:startTransform(model)
   end
   local entry=model:active_layer()
   if entry.locked then self.status='Camada bloqueada';return false end
-  local ok,session=pcall(Transform.begin,doc,doc.layers[doc.sel])
+  local ok,session=pcall(Transform.begin,doc,doc.layers[doc.sel],nil,
+    {interpolation='smooth'})
   if not ok then self.status='Transformação: '..tostring(session);return false end
   self.transform=session
-  self.status='Prévia: arraste, ajuste ângulo/escala e confirme'
+  self.status='Prévia suave: arraste, ajuste ângulo/escala e confirme'
+  return true
+end
+
+function Bridge:setTransformInterpolation(mode)
+  if not self.transform then return false end
+  local ok,err=pcall(Transform.setInterpolation,self.transform,mode)
+  if not ok then self.status='Filtro: '..tostring(err);return false end
+  self.status=mode=='smooth' and 'Transformação: Suave' or 'Transformação: Pixelado'
   return true
 end
 
