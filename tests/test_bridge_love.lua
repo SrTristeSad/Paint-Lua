@@ -158,3 +158,40 @@ assert(selectionBridge.doc.selection.kind=='wand' and
   'máscara da varinha não persistiu no NPNT5')
 love.filesystem.remove(selectionBridge.filename)
 print('PASS: LÖVE real v0.23: retângulo, laço, varinha e NPNT5')
+
+-- v0.24: seleção flutuante, prévia e transação de transformação no LÖVE real.
+local transformDoc=selectionBridge.doc
+local transformLayer=transformDoc.layers[transformDoc.sel]
+local beforeTile=assert(transformLayer.tiles['0,0'])
+local _,_,_,beforeAlpha=beforeTile:getPixel(32,32)
+assert(beforeAlpha>0,'seleção de transformação deve conter pixels')
+fresh:set_tool('transform')
+assert(selectionBridge:startTransform(fresh),
+  'não iniciou prévia de transformação: '..selectionBridge.status)
+assert(selectionBridge.transform and selectionBridge.transform.active)
+assert(not selectionBridge:save(),'salvar durante prévia deve ser bloqueado')
+local beforeUndo=#transformDoc.history.undo
+assert(selectionBridge:adjustTransform(8,0,1,0),'deslocamento de prévia falhou')
+assert(select(4,beforeTile:getPixel(32,32))>0,
+  'a prévia modificou pixels da camada antes da confirmação')
+assert(#transformDoc.history.undo==beforeUndo,'prévia criou histórico prematuro')
+assert(selectionBridge:applyTransform(fresh),'não aplicou a transformação')
+assert(selectionBridge.transform==nil,'sessão não foi liberada após confirmar')
+assert(#transformDoc.history.undo==beforeUndo+1,'transformação deve ser um gesto de undo')
+assert(select(4,transformLayer.tiles['0,0']:getPixel(40,32))>0,
+  'transformação não escreveu pixels no destino')
+assert(selectionBridge:historyStep(fresh,false),'não desfez transformação')
+assert(select(4,transformLayer.tiles['0,0']:getPixel(32,32))>0,
+  'undo não restaurou pixels de origem')
+assert(selectionBridge:historyStep(fresh,true),'não refez transformação')
+assert(Selection.contains(transformDoc.selection,40,32),
+  'redo não restaurou a seleção transformada')
+selectionBridge.filename='ci-paint-lua-v024.npnt'
+assert(selectionBridge:save(),'NPNT5 não salvou a seleção transformada')
+assert(selectionBridge:load(fresh),'NPNT5 não reabriu a transformação')
+assert(Selection.contains(selectionBridge.doc.selection,40,32),
+  'NPNT5 não preservou máscara transformada')
+assert(select(4,selectionBridge.doc.layers[selectionBridge.doc.sel].tiles['0,0']:getPixel(40,32))>0,
+  'NPNT5 não preservou pixels transformados')
+love.filesystem.remove(selectionBridge.filename)
+print('PASS: LÖVE real v0.24: transformar, preview, undo/redo e NPNT5')

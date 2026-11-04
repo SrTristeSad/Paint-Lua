@@ -10,3 +10,8 @@
 
 - A v0.23 adicionou `core/selection.lua` com retângulo, laço e varinha mágica, integrados ao `app/paint_bridge.lua` e painel superior de seleção. Preserve máscaras e roundtrip NPNT5.
 - Rode `texlua tests/test_core.lua` (870 casos) e os testes da UI; diferencie mocks de LÖVE real.
+
+- v0.24: `core/transform.lua` realiza recortar/colar raster com preview antes do commit;
+  `core/history.lua` suporta histórico combinado de pixels+seleção. Não quebrar undo único
+  ou a compatibilidade NPNT1–NPNT5. Não oferecer transformação ilimitada sem avaliação
+  de memória/CPU; limite atual de 1 milhão de pixels.

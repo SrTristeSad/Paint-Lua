@@ -12,7 +12,7 @@ Clone alternativo: git clone https://github.com/SrTristeSad/Paint-Lua.git (sem -
 
 ## Organização
 
-- **core/**: os 21 módulos Lua editáveis do núcleo (base v0.21 + seleção v0.23), com pincéis, tiles, histórico, máscaras, grupos e leitura NPNT1–NPNT5.
+- **core/**: os 22 módulos Lua editáveis do núcleo (base v0.21 + seleção v0.23 + transformações v0.24), com pincéis, tiles, histórico, máscaras, grupos e leitura NPNT1–NPNT5.
 - **src/**: estados da interface Ibis-Lua, galeria, pincéis, cores, layout e preferências.
 - **assets/icons/png/** e **assets/icons/svg/**: ícones Lucide, PNGs para LÖVE e fontes SVG editáveis. Licença em assets/icons/LICENSE-LUCIDE.txt.
 - **app/ibis_main.lua**: interface Ibis-Lua adaptada para renderizar os pixels reais.
@@ -22,9 +22,30 @@ Clone alternativo: git clone https://github.com/SrTristeSad/Paint-Lua.git (sem -
 
 ## Situação funcional
 
-A UI disponibiliza tela inicial, galeria, New Canvas, ferramentas, janelas de pincel, cores e camadas. O motor é responsável por pixels reais: **pintura, borracha, balde cooperativo, conta-gotas, Alpha Lock durante a sessão, camadas, recorte, desfazer/refazer e salvar/reabrir .npnt**. Zoom, rotação e pan usam a UI. Vários controles de filtros, transformações, máscaras, grupos e galeria **ainda são demonstrativos ou parcialmente integrados**. Não se deve assumir que um botão que existe na interface altera pixels.
+A UI disponibiliza tela inicial, galeria, New Canvas, ferramentas, janelas de pincel, cores e camadas. O motor é responsável por pixels reais: **pintura, borracha, balde cooperativo, conta-gotas, Alpha Lock durante a sessão, camadas, recorte, desfazer/refazer e salvar/reabrir .npnt**. Zoom, rotação e pan usam a UI. Vários controles de filtros, máscaras, grupos e galeria **ainda são demonstrativos ou parcialmente integrados**. Não se deve assumir que um botão que existe na interface altera pixels.
 
-A bateria do núcleo foi incorporada ao repositório na v0.23: **870 testes aprovados em texlua com mocks**, incluindo seleção, laço e NPNT5. A integração do editor também é verificada em LÖVE 11.5 real em Linux com display virtual. A integração básica passou em **LÖVE 11.5 real em Linux sob display virtual**, incluindo pincel, undo/redo e NPNT. Ainda são necessários testes manuais no Windows, desempenho e uso de caneta/tablet.
+A bateria do núcleo foi incorporada ao repositório na v0.23: **926 testes aprovados em texlua com mocks**, incluindo seleção, laço e NPNT5. A integração do editor também é verificada em LÖVE 11.5 real em Linux com display virtual. A integração básica passou em **LÖVE 11.5 real em Linux sob display virtual**, incluindo pincel, undo/redo e NPNT. Ainda são necessários testes manuais no Windows, desempenho e uso de caneta/tablet.
+
+## Transformação v0.24 — prévia não destrutiva
+
+O **Transformar** do Ibis-Lua agora trabalha nos pixels reais da camada ativa, desde que exista uma seleção.
+Selecione um retângulo, laço ou região com a varinha; escolha **Transformar** na barra lateral ou
+em Tool Select. O conteúdo selecionado é mostrado numa **prévia translúcida**, sem alterar
+os tiles originais até escolher **Aplicar**.
+
+- **Arrastar**: move a prévia dentro do canvas.
+- **-15° / +15°**: gira em passos de 15 graus; **- Zoom / + Zoom**: redimensiona em 10%.
+- **Aplicar** (ou **Enter**): recorta os pixels de origem, compõe no destino e move a seleção como
+  máscara raster; tudo em **uma ação** de desfazer/refazer.
+- **Cancelar** (ou **Esc**): encerra a prévia mantendo os pixels intactos.
+- **Setas**: deslocam 1 pixel; **Q/R**: giram 15°; **+/−**: alteram a escala.
+
+**Limitações:** transformação usa amostragem *nearest-neighbor*, sem interpolação suave,
+movimenta apenas a camada ativa e não preserva uma entidade vetorial/flutuante entre sessões.
+O commit fica limitado a **1 milhão de pixels de origem e destino** para proteger memória e CPU.
+Nenhum formato novo é necessário: o resultado raster e a máscara da seleção usam NPNT5.
+O teste de LÖVE 11.5 com a transformação foi incluído no CI; o uso manual em Windows,
+caneta e tablet continua pendente.
 
 ## Seleção na v0.23
 

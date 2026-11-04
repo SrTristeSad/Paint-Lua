@@ -8,6 +8,7 @@ local Project = require("core.project")
 local Fill = require('core.fill')
 local Job = require('core.job')
 local Selection = require('core.selection')
+local Transform = require('core.transform')
 
 local Bridge = {}
 Bridge.__index = Bridge
@@ -28,7 +29,8 @@ end
 
 function Bridge.new()
   return setmetatable({doc=nil,modelDocument=nil,byId={},uiByLayer={},
-    stroke=nil,job=nil,jobKind=nil,selectionDrag=nil,cache=nil,gpu={},
+    stroke=nil,job=nil,jobKind=nil,selectionDrag=nil,transform=nil,transformDrag=nil,
+    cache=nil,gpu={},
     filename='meu-desenho.npnt',status='Paint-Lua v0.23 pronto'},Bridge)
 end
 
@@ -60,6 +62,7 @@ function Bridge:sync(model)
     self:cancelJob()
     self:dropImages()
     self.selectionDrag=nil
+    self:cancelTransform()
     self.doc=Doc.new(model.document.width,model.document.height,'Paint-Lua')
     self.doc.layers={}
     self.byId={}
@@ -196,7 +199,7 @@ function Bridge:bucket(model,px,py,opacity)
 end
 
 function Bridge:press(model,view,prefs,uiScale,W,H,rx,ry,opacity)
-  if self.stroke or self.job then return false end
+  if self.stroke or self.job or self.transform then return false end
   if model.active_tool~='brush' and model.active_tool~='eraser'
     and model.active_tool~='bucket' and model.active_tool~='eyedropper' then
     return false
@@ -226,7 +229,7 @@ end
 -- Selecao eh um estado do documento e participa do historico estrutural.
 -- Objetos complexos ficam imutaveis depois de aplicados.
 function Bridge:applySelection(selection)
-  if not self.doc or self.stroke or self.job then return false end
+  if not self.doc or self.stroke or self.job or self.transform then return false end
   if selection then Selection.validate(self.doc,selection) end
   local previous=self.doc.selection
   if previous==selection then return false end
@@ -252,7 +255,7 @@ function Bridge:clearSelection()
 end
 
 function Bridge:beginSelection(model,view,prefs,uiScale,W,H,rx,ry)
-  if self.stroke or self.job then return false end
+  if self.stroke or self.job or self.transform then return false end
   local tool=model.active_tool
   if tool~='selection_rect' and tool~='lasso' and tool~='magic_wand' then
     return false
@@ -303,6 +306,104 @@ function Bridge:finishSelection(model,view,prefs,uiScale,W,H,rx,ry)
   return self:applySelection(selection)
 end
 
+-- A prévia retém o ImageData da camada ativa; o documento só muda ao aplicar.
+function Bridge:startTransform(model)
+  if self.transform then return true end
+  local doc=self:sync(model)
+  if not doc or self.stroke or self.job or self.selectionDrag then
+    self.status='Conclua a operação anterior';return false
+  end
+  if not doc.selection then
+    self.status='Selecione uma área antes de transformar (Ctrl+A seleciona tudo)'
+    return false
+  end
+  local entry=model:active_layer()
+  if entry.locked then self.status='Camada bloqueada';return false end
+  local ok,session=pcall(Transform.begin,doc,doc.layers[doc.sel])
+  if not ok then self.status='Transformação: '..tostring(session);return false end
+  self.transform=session
+  self.status='Prévia: arraste, ajuste ângulo/escala e confirme'
+  return true
+end
+
+function Bridge:adjustTransform(dx,dy,scale,angle)
+  local t=self.transform
+  if not t then return false end
+  local ok,err=pcall(Transform.set,t,t.dx+(dx or 0),t.dy+(dy or 0),
+    t.scaleX*(scale or 1),t.scaleY*(scale or 1),t.angle+(angle or 0))
+  if not ok then self.status='Ajuste inválido: '..tostring(err);return false end
+  return true
+end
+
+function Bridge:beginTransformDrag(model,view,prefs,uiScale,W,H,rx,ry)
+  if model.active_tool~='transform' then return false end
+  if not self:startTransform(model) then return false end
+  local px,py=self:point(model,view,prefs,uiScale,W,H,rx,ry)
+  if not px then return false end
+  local b=Transform.bounds(self.transform)
+  if px<b.x or py<b.y or px>b.x+b.w or py>b.y+b.h then
+    self.status='Clique dentro dos limites da seleção para mover'
+    return false
+  end
+  self.transformDrag={x=px,y=py,dx=self.transform.dx,dy=self.transform.dy}
+  return true
+end
+
+function Bridge:moveTransform(model,view,prefs,uiScale,W,H,rx,ry)
+  if not self.transform or not self.transformDrag then return false end
+  local px,py=self:toCanvas(model,view,prefs,uiScale,W,H,rx,ry)
+  if not px then return false end
+  local d=self.transformDrag
+  local t=self.transform
+  local ok,err=pcall(Transform.set,t,d.dx+px-d.x,d.dy+py-d.y,
+    t.scaleX,t.scaleY,t.angle)
+  if not ok then self.status=tostring(err);return false end
+  return true
+end
+
+function Bridge:finishTransformDrag()
+  self.transformDrag=nil
+end
+
+function Bridge:cancelTransform()
+  self.transformDrag=nil
+  if not self.transform then return false end
+  Transform.cancel(self.transform)
+  self.transform=nil
+  self.status='Transformação cancelada; pixels intactos'
+  return true
+end
+
+function Bridge:applyTransform(model)
+  if not self.transform then return false end
+  local n,err=Transform.commit(self.transform)
+  if n==nil then self.status='Transformação: '..tostring(err);return false end
+  self.transform=nil
+  self.transformDrag=nil
+  self.status=('Transformação aplicada: %d pixels'):format(n)
+  return true
+end
+
+function Bridge:transformKey(model,key)
+  if not self.transform then return false end
+  if key=='escape' then self:cancelTransform();return true end
+  if key=='return' or key=='kpenter' then self:applyTransform(model);return true end
+  if key=='left' then self:adjustTransform(-1,0);return true end
+  if key=='right' then self:adjustTransform(1,0);return true end
+  if key=='up' then self:adjustTransform(0,-1);return true end
+  if key=='down' then self:adjustTransform(0,1);return true end
+  if key=='q' then self:adjustTransform(0,0,1,-math.pi/12);return true end
+  if key=='r' then self:adjustTransform(0,0,1,math.pi/12);return true end
+  if key=='=' or key=='kp+' then self:adjustTransform(0,0,1.1);return true end
+  if key=='-' or key=='kp-' then self:adjustTransform(0,0,1/1.1);return true end
+  -- A prévia precisa ser confirmada antes de qualquer outro comando.
+  if key=='b' or key=='e' then
+    self.status='Confirme ou cancele a transformação antes de trocar de ferramenta'
+    return true
+  end
+  return false
+end
+
 -- A UI fornece transformacao/zoom antes da chamada; as coordenadas locais
 -- da borda são iguais às usadas por Bridge:draw para os tiles.
 function Bridge:drawSelection(x,y,canvasScale)
@@ -313,6 +414,9 @@ function Bridge:drawSelection(x,y,canvasScale)
   local g=love.graphics
   g.setLineWidth(1/math.max(canvasScale,0.01))
   g.setColor(0.96,0.30,0.20,0.95)
+  if self.transform then
+    Transform.drawPreview(self.transform,x,y)
+  end
   if sel then
     if sel.kind=='polygon' then
       local p=sel.points
@@ -431,6 +535,7 @@ function Bridge:draw(x,y)
 end
 
 function Bridge:save()
+  if self.transform then return nil,'confirme ou cancele a transformação primeiro' end
   if not self.doc then return nil,'nenhum documento' end
   if self.job then return nil,'operação em andamento' end
   if self.selectionDrag then return nil,'finalize a seleção antes de salvar' end
@@ -441,6 +546,7 @@ function Bridge:save()
 end
 
 function Bridge:load(model)
+  self:cancelTransform()
   self:finish(true)
   self:cancelJob()
   self.selectionDrag=nil
@@ -468,6 +574,7 @@ end
 
 function Bridge:historyStep(model,redo)
   if model.screen~='editor' then return false end
+  if self.transform then self.status='Confirme ou cancele a transformação antes do histórico';return false end
   if self.job then
     self.status='Finalize ou cancele o trabalho antes do histórico'
     return false
@@ -490,7 +597,12 @@ function Bridge:key(model,key)
   if not (k and k.isDown('lctrl','rctrl','lgui','rgui')) then return false end
   if key=='a' then self:selectAll(model);return true end
   if key=='d' then self:clearSelection();return true end
-  if key=='s' then self:sync(model);self:save();return true end
+  if key=='s' then
+    self:sync(model)
+    local ok,err=self:save()
+    if not ok then self.status=tostring(err) end
+    return true
+  end
   if key=='o' then self:load(model);return true end
   if key=='z' then self:historyStep(model,false);return true end
   if key=='y' then self:historyStep(model,true);return true end

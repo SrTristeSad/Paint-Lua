@@ -1851,6 +1851,7 @@ require('tests.test_sparse_composite_v021')(check)
 require('tests.test_core_alpha_lock')(check)
 require('tests.test_bridge_core_v022')(check)
 require('tests.test_selection_v023')(check)
+require('tests.test_transform_v024')(check)
 
 print(string.format("\n%d passou, %d falhou", passed, failed))
 if failed > 0 then os.exit(1) end

@@ -1,0 +1,165 @@
+-- Regressões da transformação raster (v0.24). Execução com mock e LÖVE real.
+return function(check)
+  local Doc=require('core.doc')
+  local Sel=require('core.selection')
+  local T=require('core.transform')
+  local Hist=require('core.history')
+  local function px(l,x,y)
+    local tile=Doc.getTile(l,math.floor(x/256),math.floor(y/256),false)
+    if not tile then return 0,0,0,0 end
+    return tile:getPixel(x%256,y%256)
+  end
+  local function put(l,x,y,r,g,b,a)
+    local tile,k=Doc.getTile(l,math.floor(x/256),math.floor(y/256),true)
+    tile:setPixel(x%256,y%256,r,g,b,a)
+    Doc.markDirty(l,k)
+  end
+  local d=Doc.new(60,60,'Transformação')
+  local l=d.layers[2]
+  put(l,10,10,1,0,0,1);put(l,12,10,0,0,1,1)
+  put(l,22,10,0,1,0,1)
+  d.selection=Sel.rect(d,10,10,12,10)
+  local s=T.begin(d,l)
+  check('transformação: captura seleção original',s.w==3 and s.h==1 and s.hasPixels)
+  check('transformação: inicialização não cria histórico',#d.history.undo==0)
+  T.set(s,10,0,1,1,0)
+  local b=T.bounds(s)
+  check('transformação: limites de deslocamento',b.x==20 and b.y==10 and b.w==3 and b.h==1)
+  check('transformação: prévia não altera pixels de origem',select(4,px(l,10,10))==1)
+  check('transformação: prévia não altera pixels de destino',select(4,px(l,20,10))==0)
+  local n,after=T.commit(s)
+  check('transformação: deslocamento pinta posição nova',n==2 and select(4,px(l,20,10))==1)
+  check('transformação: deslocamento remove conteúdo original',select(4,px(l,10,10))==0)
+  check('transformação: não remove pixel fora da seleção',select(4,px(l,22,10))==1)
+  check('transformação: destino compõe sobre pixel existente',select(4,px(l,22,10))==1 and select(3,px(l,22,10))==1)
+  check('transformação: seleção segue conteúdo',after.kind=='wand' and Sel.contains(after,20,10) and not Sel.contains(after,10,10))
+  check('transformação: uma única ação no histórico',#d.history.undo==1)
+  check('transformação: desfazer restaura imagem',Hist.undo(d) and select(4,px(l,10,10))==1 and select(4,px(l,20,10))==0)
+  check('transformação: desfazer restaura seleção',d.selection.kind==nil and Sel.contains(d.selection,10,10))
+  check('transformação: refazer restaura imagem',Hist.redo(d) and select(4,px(l,20,10))==1)
+  check('transformação: refazer restaura seleção',d.selection.kind=='wand' and Sel.contains(d.selection,20,10))
+  local undone=T.begin(d,l)
+  T.set(undone,-9,0,1,1,0)
+  check('transformação: cancelar descarta prévia',T.cancel(undone))
+  check('transformação: cancelar não muda pixels',select(4,px(l,20,10))==1)
+  check('transformação: cancelar não mexe no histórico',#d.history.undo==1)
+  local ok=pcall(T.commit,undone)
+  check('transformação: não confirma sessão cancelada',not ok)
+
+  local dr=Doc.new(32,32,'Rotação e escala')
+  local lr=dr.layers[2]
+  put(lr,5,5,0.8,0.2,0.1,1)
+  dr.selection=Sel.rect(dr,5,5,5,5)
+  local rt=T.begin(dr,lr)
+  T.set(rt,0,0,1,1,math.pi/2)
+  local sx,sy=T.inverse(rt,5.5,5.5)
+  check('transformação: rotação inversa válida',math.abs(sx-5.5)<0.0001 and math.abs(sy-5.5)<0.0001)
+  local nn=T.commit(rt)
+  check('transformação: giro 90 graus sem perder conteúdo',nn==1 and select(4,px(lr,5,5))==1)
+  local sc=T.begin(dr,lr)
+  T.set(sc,0,0,3,2,0)
+  nn=T.commit(sc)
+  check('transformação: escala amplia região raster',nn==6)
+  check('transformação: escala preserva pixel central',select(4,px(lr,5,5))==1)
+  check('transformação: escala atualiza seleção',dr.selection.kind=='wand' and dr.selection.w==3 and dr.selection.h==2)
+
+  local dp=Doc.new(48,48,'Laço e espelhamento')
+  local lp=dp.layers[2]
+  for y=10,20 do for x=10,20 do put(lp,x,y,0,0,1,1) end end
+  dp.selection=assert(Sel.polygon(dp,{{10,10},{20,10},{10,20}}))
+  local poly=T.begin(dp,lp)
+  T.set(poly,12,0,-1,1,0)
+  nn=T.commit(poly)
+  check('transformação: laço preserva buracos',nn>0 and select(4,px(lp,18,18))==1)
+  check('transformação: laço transformado continua preciso',dp.selection.kind=='wand' and not Sel.contains(dp.selection,32,18))
+  check('transformação: laço remove somente fonte selecionada',select(4,px(lp,11,11))==0 and select(4,px(lp,18,18))==1)
+
+  local off=T.begin(dp,lp)
+  T.set(off,500,0,1,1,0)
+  local count,msg=T.commit(off)
+  check('transformação: fora do canvas falha sem apagar',count==nil and type(msg)=='string')
+  check('transformação: falha fora do canvas mantém sessão',off.active)
+  T.cancel(off)
+  ok=pcall(T.set,off,1,1,1,1,0)
+  check('transformação: sessão inativa não muda',not ok)
+  local big=Doc.new(1300,1300,'Limite de RAM')
+  big.selection=Sel.rect(big,0,0,1299,1299)
+  ok=pcall(T.begin,big,big.layers[2])
+  check('transformação: bloqueia área acima de 1 milhão',not ok)
+  local al=T.begin(d,l)
+  ok=pcall(T.set,al,0,0,0.001,1,0)
+  check('transformação: escala minúscula rejeitada',not ok)
+  ok=pcall(T.set,al,0,0,1/0,1,0)
+  check('transformação: infinito rejeitado',not ok)
+  T.cancel(al)
+
+  -- Injeção de falha na escrita do destino: rollback de todos os tiles.
+  local df=Doc.new(40,40,'Rollback')
+  local lf=df.layers[2]
+  put(lf,3,3,1,0,0,1)
+  df.selection=Sel.rect(df,3,3,3,3)
+  local fail=T.begin(df,lf)
+  T.set(fail,10,0,1,1,0)
+  local tile=Doc.getTile(lf,0,0,false)
+  local raw=tile.setPixel
+  local writes=0
+  function tile:setPixel(...)
+    writes=writes+1
+    if writes==2 then error('falha induzida no tile') end
+    return raw(self,...)
+  end
+  local result,err=T.commit(fail)
+  check('transformação: falha em tile inicia rollback',result==nil and type(err)=='string' and writes==2)
+  check('transformação: rollback mantém origem',select(4,px(lf,3,3))==1)
+  check('transformação: rollback mantém destino',select(4,px(lf,13,3))==0)
+  check('transformação: rollback deixa histórico limpo',df.history.stroke==nil and #df.history.undo==0)
+  T.cancel(fail)
+
+  -- Caminho do editor: seleção, transformação com arraste e confirmação.
+  local Model=require('src.model')
+  local Bridge=require('app.paint_bridge')
+  local View=require('src.viewport')
+  local Pref=require('src.editor_preferences')
+  local model=Model.new()
+  model:open_gallery();model:open_new_canvas();model:create_canvas(64,64)
+  local bridge=Bridge.new()
+  local bd=bridge:sync(model)
+  local bl=bd.layers[1]
+  put(bl,32,32,0.1,0.8,0.2,1)
+  bd.selection=Sel.rect(bd,32,32,32,32)
+  model:set_tool('transform')
+  local view,pref=View.new(),Pref.new()
+  local left=pref.tool_position=='left' and 62 or 0
+  local right=pref.tool_position=='right' and 75 or 34
+  local cx=left+(1024-left-right)/2
+  local cy=62+(768-160)/2
+  local z=math.min((1024-left-right)/64,(768-160)/64,1.1)
+  local function pos(x,y) return cx+(x-32)*z,cy+(y-32)*z end
+  check('transformação UI: inicia a partir da ferramenta',bridge:startTransform(model) and bridge.transform~=nil)
+  check('transformação UI: salvamento bloqueado durante prévia',bridge:save()==nil)
+  check('transformação UI: histórico bloqueado durante prévia',not bridge:historyStep(model,false))
+  local x1,y1=pos(32.5,32.5)
+  local x2,y2=pos(40.5,34.5)
+  check('transformação UI: começa arraste dentro dos limites',
+    bridge:beginTransformDrag(model,view,pref,1,1024,768,x1,y1))
+  check('transformação UI: move prévia arrastando',bridge:moveTransform(model,view,pref,1,1024,768,x2,y2))
+  check('transformação UI: delta horizontal/vertical',
+    math.abs(bridge.transform.dx-8)<0.01 and math.abs(bridge.transform.dy-2)<0.01)
+  bridge:finishTransformDrag()
+  check('transformação UI: arraste encerrado',bridge.transformDrag==nil and bridge.transform~=nil)
+  check('transformação UI: antes de aplicar pixels intactos',select(4,px(bl,32,32))==1)
+  check('transformação UI: confirma com Enter',bridge:transformKey(model,'return'))
+  check('transformação UI: aplica pixel novo',select(4,px(bl,40,34))==1)
+  check('transformação UI: remove fonte antiga',select(4,px(bl,32,32))==0)
+  check('transformação UI: histórico desfaz gesto inteiro',bridge:historyStep(model,false))
+  check('transformação UI: undo restaura fonte e seleção',
+    select(4,px(bl,32,32))==1 and Sel.contains(bd.selection,32,32))
+  check('transformação UI: redo gesto inteiro',bridge:historyStep(model,true))
+  check('transformação UI: redo restaura destino e seleção',
+    select(4,px(bl,40,34))==1 and Sel.contains(bd.selection,40,34))
+  check('transformação UI: inicia prévia pós-redo',bridge:startTransform(model))
+  check('transformação UI: ESC cancela sem tocar imagem',bridge:transformKey(model,'escape'))
+  check('transformação UI: ESC encerra sessão',bridge.transform==nil and select(4,px(bl,40,34))==1)
+  bridge:clearSelection()
+  check('transformação UI: exige área selecionada',not bridge:startTransform(model))
+end

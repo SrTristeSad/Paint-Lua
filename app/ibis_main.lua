@@ -1061,7 +1061,15 @@ local function editor_screen()
             glyph_color=nil
             local key=entry[2]
             hit(rail.x+2,y,rail.w-4,h,function()
+                if paint.transform and key~='transform' then
+                    notice('Confirme ou cancele a transformação antes de mudar de ferramenta')
+                    return
+                end
                 state:set_tool(key)
+                if key=='transform' then
+                    paint:startTransform(state)
+                    notice(paint.status)
+                end
                 if key=="brush" or key=="eraser" then set_panel("brush")
                 elseif key=="text" then set_panel("text")
                 else panel=nil;state.active_panel=nil end
@@ -1077,6 +1085,29 @@ local function editor_screen()
         end
     end
     if visual.reference then draw_reference_window() end
+    -- Controles flutuantes da prévia. O original permanece intacto até Aplicar.
+    if paint.transform then
+        local bw=85
+        local gap=5
+        local ox=math.max(72,(W-(bw+gap)*6)/2)
+        local oy=H-158
+        rectangle(ox-7,oy-7,(bw+gap)*6+9,43,C.deep,0.96,6)
+        local buttons={
+            {'-15°',function() paint:adjustTransform(0,0,1,-math.pi/12) end},
+            {'+15°',function() paint:adjustTransform(0,0,1,math.pi/12) end},
+            {'- Zoom',function() paint:adjustTransform(0,0,1/1.1) end},
+            {'+ Zoom',function() paint:adjustTransform(0,0,1.1) end},
+            {'Cancelar',function() paint:cancelTransform() end},
+            {'Aplicar',function() paint:applyTransform(state) end},
+        }
+        for i,item in ipairs(buttons) do
+            local bx=ox+(i-1)*(bw+gap)
+            rectangle(bx,oy,bw,30,i==6 and C.blue or C.panel_head,0.95,4)
+            label(item[1],bx+1,oy+8,bw-2,'small','center',C.white)
+            hit(bx,oy,bw,30,function() item[2]();notice(paint.status) end,
+                'transform_action_'..i)
+        end
+    end
     draw_size_controls()
     draw_editor_toolbar()
     if panel then
@@ -1991,8 +2022,16 @@ function draw_editor_panel()
             end
             local key=item[2]
             hit(xx,yy,cell_w,cell_h,function()
+                if paint.transform and key~='transform' then
+                    notice('Confirme ou cancele a transformação')
+                    return
+                end
                 state:set_tool(key)
                 panel=nil;state.active_panel=nil
+                if key=='transform' then
+                    paint:startTransform(state)
+                    notice(paint.status)
+                end
             end,"tool_choice_"..key)
         end
     elseif name=="back" then
@@ -2296,6 +2335,11 @@ function love.mousepressed(rx,ry,button)
     end
     if state.screen=="editor" and not panel
         and not love.keyboard.isDown("space")
+        and paint:beginTransformDrag(state,view,preferences,scale,W,H,rx,ry) then
+        return
+    end
+    if state.screen=="editor" and not panel
+        and not love.keyboard.isDown("space")
         and paint:beginSelection(state,view,preferences,scale,W,H,rx,ry) then
         if state.active_tool=="magic_wand" then notice(paint.status) end
         return
@@ -2371,6 +2415,9 @@ function love.mousemoved(rx,ry,dx,dy)
         if love.keyboard.isDown("space") then view:pan_to(rx/scale,ry/scale)
         else view:end_pan() end
     end
+    if paint.transformDrag then
+        paint:moveTransform(state,view,preferences,scale,W,H,rx,ry)
+    end
     if paint.selectionDrag then
         paint:moveSelection(state,view,preferences,scale,W,H,rx,ry)
     end
@@ -2378,6 +2425,7 @@ function love.mousemoved(rx,ry,dx,dy)
 end
 function love.mousereleased(rx,ry,button)
     if button~=1 then return end
+    paint:finishTransformDrag()
     paint:finish(false)
     if paint.selectionDrag then
         paint:finishSelection(state,view,preferences,scale,W,H,rx,ry)
@@ -2491,6 +2539,7 @@ function love.textinput(t)
 end
 function love.keypressed(key)
     if key=="f12" then capture_requested=true;return end
+    if paint:transformKey(state,key) then notice(paint.status);return end
     if key=="escape" and paint.job then
         paint:cancelJob()
         notice(paint.status)
@@ -2991,7 +3040,10 @@ local function color_e2e_update()
 end
 
 function love.focus(focused)
-    if not focused then paint:finish(true) end
+    if not focused then
+        paint:finish(true)
+        paint:finishTransformDrag()
+    end
 end
 function love.update()
     local result=paint:update()

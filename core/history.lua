@@ -193,11 +193,14 @@ function H.rollback(h)
   return true
 end
 
-function H.commit(h, token)
+function H.commit(h, token, opts)
   H.assertUnlocked(h, token)
   local s = h.stroke
   h.stroke = nil
-  if s and #s.entries > 0 then
+  if s and (#s.entries > 0 or (opts and opts.selectionBefore ~= nil)) then
+    if opts and opts.selectionBefore ~= nil then
+      s.entries.selectionBefore = opts.selectionBefore
+    end
     h.undo[#h.undo + 1] = s.entries
     h.redo = {}
     trim(h)
@@ -297,9 +300,15 @@ local function step(doc, from, to)
     current[i] = {layer = e.layer, maskTarget = e.maskTarget,
       key = e.key, before = cur or false}
   end
+  if item.selectionBefore ~= nil then
+    current.selectionBefore = doc.selection or false
+  end
   to[#to + 1] = current
   for _, e in ipairs(item) do
     apply(e)
+  end
+  if item.selectionBefore ~= nil then
+    doc.selection = item.selectionBefore or nil
   end
   return true
 end

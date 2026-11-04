@@ -15,3 +15,14 @@ Verificação: a bateria completa do núcleo agora está versionada em `tests/` 
 O backup da arquitetura antiga está na branch backup/pre-ibis-rebuild-2026-11-03, e a fase com submódulo permanece no histórico Git. Não restaurar essas arquiteturas sem autorização do criador.
 
 **Próximo escopo sugerido:** seleções combinadas/invertidas e ferramentas de transformação sem destruir a camada original. Primeiro confirmar a v0.23 no Windows e corrigir problemas da interface. Leia `docs/SELECAO_v023.md`.
+
+## Estado adicional: v0.24
+
+O Paint-Lua tem transformação raster não destrutiva **até confirmar** em `core/transform.lua`.
+A ponte expõe arraste, escala (10%), rotação (15°), aplicar e cancelar; o resultado é
+recortado e colado na camada ativa com histórico único para pixels e seleção.
+O limite é 1 milhão de pixels e a amostragem é nearest-neighbor. Não confundir
+transformação raster aplicada com objetos flutuantes persistentes. NPNT5 continua vigente.
+Os testes simulados chegaram a 926; CI com ImageData real precisa ser executado para
+cada revisão. Próxima etapa: handles visuais de transformação, antialias, seleção/transformação
+em outras camadas e melhorias de fluxo na UI; somente conforme pedido do criador.
