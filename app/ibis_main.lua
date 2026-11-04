@@ -772,14 +772,12 @@ local function draw_editor_toolbar()
             notice("Mesclar para baixo ainda não é simulado.")
         end},
         {"undo",function()
-            if preferences.show_undo_message then
-                notice("Nenhuma alteração de pintura para desfazer.")
-            end
+            paint:historyStep(state,false)
+            if preferences.show_undo_message then notice(paint.status) end
         end},
         {"redo",function()
-            if preferences.show_undo_message then
-                notice("Nenhuma alteração de pintura para refazer.")
-            end
+            paint:historyStep(state,true)
+            if preferences.show_undo_message then notice(paint.status) end
         end},
         {"layer",function() set_panel("layer") end},
         {"back",function() set_panel("back") end}
@@ -947,7 +945,7 @@ local function draw_reference_window()
     local factor=math.min((pw-54)/dw,93/dh)
     rectangle(x+pw/2-dw*factor/2,y+49+(93-dh*factor)/2,
         dw*factor,dh*factor,C.white)
-    label("Canvas mode (simulado)",x+5,y+156,pw-10,"tiny","center",C.white)
+    label("Prévia simplificada do canvas",x+5,y+156,pw-10,"tiny","center",C.white)
 end
 
 local function editor_screen()
@@ -1324,7 +1322,7 @@ function draw_editor_panel()
             local active=layer.id==state.active_layer_id
             rectangle(bx,yy,w-53,50,
                 active and C.blue or C.light,active and 0.72 or 0.15,2)
-            -- Transparent thumbnails: artwork pixels are not implemented.
+            -- Miniaturas de camadas demonstrativas: pintura real aparece no canvas.
             for i=0,3 do for j=0,3 do
                 local v=(i+j)%2==0 and 0.87 or 0.65
                 rectangle(bx+4+i*10,yy+5+j*10,10,10,{v,v,v})
@@ -1603,7 +1601,7 @@ function draw_editor_panel()
             opacity=100
         end,"brush_reset")
         -- Show what the selected brush looks like without claiming to paint.
-        label("Preview only — no painting engine",
+        label("Amostra visual — pincel real no canvas",
             rx,inner_y+inner_h-32,rw,"tiny","center",C.soft)
     elseif name=="color" then
         local function apply_color()
@@ -2264,6 +2262,12 @@ function love.mousepressed(rx,ry,button)
     if state.screen=="editor" and not panel
         and not love.keyboard.isDown("space")
         and paint:press(state,view,preferences,scale,W,H,rx,ry,opacity) then
+        if state.active_tool=="eyedropper" then
+            local c=state.color
+            colors:set_rgb(c[1],c[2],c[3])
+        elseif state.active_tool=="bucket" then
+            notice(paint.status)
+        end
         return
     end
     if state.screen=="editor" and not panel and love.keyboard.isDown("space") then
@@ -2439,6 +2443,11 @@ function love.textinput(t)
 end
 function love.keypressed(key)
     if key=="f12" then capture_requested=true;return end
+    if key=="escape" and paint.job then
+        paint:cancelJob()
+        notice(paint.status)
+        return
+    end
     if paint:key(state,key) then notice(paint.status);return end
     if state.screen=="editor" and panel=="color" and color_dialog then
         if key=="escape" then color_dialog=nil
@@ -2926,6 +2935,8 @@ function love.focus(focused)
     if not focused then paint:finish(true) end
 end
 function love.update()
+    local result=paint:update()
+    if result then notice(result) end
     if smoke and capture_done then
         if capture_error then error("Screenshot: "..capture_error) end
         love.event.quit(0)

@@ -191,7 +191,7 @@ local function dabLua(doc, layer, h, cx, cy, o)
     for tx = math.floor(x0 / T), math.floor(x1 / T) do
       local existing, key = Doc.getTile(layer, tx, ty, false)
       -- Apagar uma região ainda transparente não exige memória, snapshot nem GPU.
-      if not (o.eraser and not existing) then
+      if not (o.eraser and not existing) and not (o.alphaLock and not existing) then
       local tile, accum
 
       local ox, oy = tx * T, ty * T
@@ -218,7 +218,8 @@ local function dabLua(doc, layer, h, cx, cy, o)
           local dx, dy = px + 0.5 - cx, py + 0.5 - cy
           local f = coverage(dx, dy)
           if paper then f = Texture.paperCoverage(paper,f,px,py) end
-          if f > 0 then
+          if f > 0 and (not o.alphaLock or
+            (existing and select(4,existing:getPixel(px-ox,py-oy)) > 0)) then
             if not tile then
               Hist.touch(h,layer,key)
               tile=Doc.getTile(layer,tx,ty,true)
@@ -260,13 +261,19 @@ local function dabLua(doc, layer, h, cx, cy, o)
                 local painted=accum[ly * T + lx + 1]
                 cr,cg,cb=painted.paintR,painted.paintG,painted.paintB
               end
-              local outA = sa + da * (1 - sa)
-              if outA > 0 then
-                tile:setPixel(lx, ly,
-                  (cr * sa + dr * da * (1 - sa)) / outA,
-                  (cg * sa + dg * da * (1 - sa)) / outA,
-                  (cb * sa + db * da * (1 - sa)) / outA,
-                  outA)
+              if o.alphaLock then
+                -- Alpha Lock altera somente RGB de pixels já existentes.
+                tile:setPixel(lx,ly, cr*sa+dr*(1-sa),
+                  cg*sa+dg*(1-sa),cb*sa+db*(1-sa),da)
+              else
+                local outA = sa + da * (1 - sa)
+                if outA > 0 then
+                  tile:setPixel(lx, ly,
+                    (cr * sa + dr * da * (1 - sa)) / outA,
+                    (cg * sa + dg * da * (1 - sa)) / outA,
+                    (cb * sa + db * da * (1 - sa)) / outA,
+                    outA)
+                end
               end
             end
           end
@@ -440,6 +447,12 @@ B.impl = "lua"
 local useFFI = HAS_JIT
 
 local function dabDispatch(doc, layer, h, cx, cy, o)
+  if o.alphaLock then
+    -- FFI não altera alfa em modo de bloqueio até haver teste de paridade.
+    B.impl='lua-alpha-lock'
+    if not o.eraser then return dabLua(doc,layer,h,cx,cy,o) end
+    return
+  end
   -- O buffer de fluxo preserva pixels anteriores e a cobertura acumulada.
   -- Por segurança usa Lua puro até haver paridade FFI/Lua comprovada.
   if o.target == "mask" then

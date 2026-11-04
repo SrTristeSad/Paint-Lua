@@ -82,6 +82,8 @@ function Stroke.new(doc, layer, history, opts)
   local spacing = opts.spacing or 0.15
   assert(finite(spacing) and spacing > 0 and spacing <= 2, "espaçamento inválido")
   assert(opts.eraser == nil or type(opts.eraser) == "boolean", "borracha inválida")
+  assert(opts.alphaLock == nil or type(opts.alphaLock) == 'boolean',
+    'alphaLock deve ser booleano')
   if opts.flow ~= nil then assert(valid01(opts.flow), "fluxo inválido") end
   if opts.scatter ~= nil then
     assert(finite(opts.scatter) and opts.scatter >= 0 and opts.scatter <= 10,
