@@ -63,6 +63,8 @@ jobs:
         run: timeout 60s xvfb-run -a env PAINT_LUA_PNG_FILTER_E2E=1 love .
       - name: E2E de controles Suave/Pixelado e alças da transformação
         run: timeout 70s xvfb-run -a env PAINT_LUA_TRANSFORM_FILTER_E2E=1 love .
+      - name: E2E de arrastar as alças reais no editor
+        run: timeout 70s xvfb-run -a env PAINT_LUA_TRANSFORM_HANDLES_E2E=1 love .
       - name: E2E de arraste, setas e rolagem do painel Layer
         run: timeout 60s xvfb-run -a env PAINT_LUA_LAYER_E2E=1 love .
       - name: Inspecionar janela avançada no LÖVE
