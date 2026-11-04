@@ -1,13 +1,29 @@
 # Paint-Lua
 
-> **Quer continuar este projeto em outro chat?** Leia o [PROMPT DO PROJETO](PROMPT_DO_PROJETO.md), com objetivo, histórico técnico, estado da v0.21 e próximos passos. Assistentes de programação também devem ler [AGENTS.md](AGENTS.md). Este é o ponto de partida oficial para retomar o desenvolvimento.
+**Editor experimental de pintura digital em Lua e LÖVE 11.5.** O projeto combina a interface do **[Ibis-Lua](https://github.com/SrTristeSad/Ibis-Lua)** com o núcleo próprio de pintura **v0.21**. Este repositório é a base do projeto.
 
+> Continue em outro chat: leia [PROMPT_DO_PROJETO.md](PROMPT_DO_PROJETO.md) e [AGENTS.md](AGENTS.md).
 
-Editor de pintura experimental em **Lua / LÖVE 11.5**, organizado em um núcleo de pintura independente (v0.21) e uma primeira casca gráfica. Este repositório é o ponto de desenvolvimento do projeto.
+## Estado atual
 
-## Como executar
+- **Interface:** o Ibis-Lua fornece tela inicial, galeria, novo canvas e painéis de pincel, cor e camadas. Está incluído como **submódulo Git fixado numa revisão**; o código original permanece no repositório Ibis-Lua.
+- **Motor:** os pixels reais, pincel, borracha, composição e histórico usam o núcleo Lua v0.21. A ponte inicial está em `app/paint_bridge.lua` e a adaptação da interface em `app/ibis_main.lua`.
+- **Atualmente integrados:** criação de documento, pintura básica com mouse, borracha, cores, espessura/opacidade da interface, camadas básicas, zoom/rotação/pan da UI, salvar/abrir o arquivo `meu-desenho.npnt` no diretório de dados do LÖVE, Ctrl+Z/Ctrl+Y para o traço.
+- **Ainda demonstrativos ou parciais:** galeria não salva todas as obras; filtros, transformações, texturas avançadas, algumas opções do painel de camadas, máscaras e grupos ainda precisam de conexão própria à interface. A integração não garante fidelidade visual ao ibisPaint proprietário.
 
-Requisitos: **LÖVE 11.5**, `git`, `sh`, `base64`, `xz` e `tar`. Para a conferência SHA-256, use `sha256sum` ou `shasum`.
+## Instalar no Windows
+
+Instale [Git](https://git-scm.com/) e [LÖVE 11.5](https://love2d.org/). No terminal:
+
+```bat
+git clone --recurse-submodules https://github.com/SrTristeSad/Paint-Lua.git
+cd Paint-Lua
+testar.bat
+```
+
+O `testar.bat` prepara `core/` automaticamente pelo PowerShell na primeira execução. Use um clone, não o botão **Download ZIP** do GitHub: o ZIP padrão não contém o código dos submódulos.
+
+## Linux/macOS
 
 ```sh
 git clone --recurse-submodules https://github.com/SrTristeSad/Paint-Lua.git
@@ -16,41 +32,22 @@ sh scripts/prepare-core.sh
 love .
 ```
 
-O núcleo v0.21 está versionado em 12 partes no diretório `archive/core-v0.21.parts/`. O script **reconstrói os módulos Lua editáveis em `core/`**, verifica a integridade do pacote e mantém os arquivos da casca intactos. Não é necessário baixar separadamente os ZIPs da conversa para executar o projeto. Para continuar desenvolvendo o motor, edite `core/*.lua` e versione os arquivos com Git normalmente.
-
-## Controles da casca atual
-
-- Arrastar o botão esquerdo sobre a tela: pintar ou apagar; `B` e `E` escolhem a ferramenta.
-- Botão direito ou espaço + arrastar: mover o canvas; roda do mouse: zoom; `F`: centralizar.
-- `[` e `]`: diminuir ou aumentar o pincel.
-- `Ctrl+S`: salvar `meu-desenho.npnt` na pasta de dados do LÖVE.
-- `Ctrl+O`: reabrir o projeto dessa pasta; `Ctrl+Z` e `Ctrl+Y`: desfazer e refazer.
-- Painel direito: adicionar/selecionar camadas e trocar cores.
-
-Esta interface é **um primeiro protótipo**, não a apresentação definitiva nem um editor completo com todas as ferramentas do núcleo expostas.
+No Windows também é possível executar o script `scripts/prepare-core.ps1` manualmente. `core/` será criado com 20 módulos Lua a partir de `archive/core-v0.21.parts/` (12 partes, verificação SHA-256). Não há dependência de DragonBones ou Bono-Lua.
 
 ## Organização
 
-- `archive/core-v0.21.parts/`: cópia comprimida versionada do núcleo.
-- `core/`: 20 módulos Lua extraídos pelo script de instalação; pintura, histórico, composição, máscaras, grupos e persistência.
-- `app/editor.lua`: estado do editor, comandos e entrada do usuário.
-- `ui/layout.lua`, `ui/draw.lua`: desenho e áreas interativas da casca.
-- `main.lua`, `conf.lua`: entrada e configuração do LÖVE.
-- `integrations/bono.lua`: ponte opcional com o `WorldClock`.
-- `vendor/Bono-Lua`: submódulo Git opcional, com desenvolvimento independente.
-- `scripts/prepare-core.sh`: instalação e verificação do núcleo.
-- `scripts/smoke-core.lua`: teste básico que pode ser rodado com `texlua`.
+| Caminho | Função |
+| --- | --- |
+| `vendor/Ibis-Lua/` | Interface original mantida como submódulo |
+| `src/icon_pack.lua` | Adaptador local para carregar ícones do submódulo |
+| `app/ibis_main.lua` | Integração incremental dos callbacks Ibis-Lua |
+| `app/paint_bridge.lua` | Ponte de ferramentas e documento com o núcleo |
+| `core/` | Motor v0.21 gerado pelos scripts |
+| `archive/core-v0.21.parts/` | Núcleo compactado versionado |
+| `scripts/` | Preparação e smoke test |
 
-## Verificação
+## Qualidade, proveniência e limites
 
-```sh
-texlua scripts/smoke-core.lua
-```
+A versão anterior do núcleo registrou **777 testes aprovados em `texlua` com mocks**. Essa contagem é histórica; **não comprova que a integração atual já foi validada no LÖVE 11.5 real**. Teste com desenho, camadas, zoom, rotação, desfazer e salvar/abrir antes de confiar em trabalhos importantes.
 
-Os **777 testes do núcleo v0.21** passaram em `texlua` com simulações de `ImageData` do LÖVE antes da publicação. A integridade de todas as 12 partes publicadas no GitHub também foi conferida com o pacote original. **Ainda não houve validação visual e de desempenho da casca no LÖVE 11.5 real**, nem do caminho LuaJIT/FFI ou de dispositivos móveis.
-
-## Referências, créditos e licenças
-
-O [PhotoCraft](https://github.com/storytold/photocraft) é referência técnica para vários conceitos reimplementados/adaptados em Lua. Seu texto de licença MIT foi preservado em `LICENSE-PHOTOCRAFT-MIT.txt`. O **ibisPaint é referência funcional**, não fonte de código; não há compatibilidade comprovada com seus formatos proprietários. Detalhes em [ORIGENS.md](ORIGENS.md).
-
-O [Bono-Lua](https://github.com/SrTristeSad/Bono-Lua) é um projeto independente, ainda sem renderizador DragonBones completo para a casca. A ponte atual usa apenas o relógio de atualização quando disponível, sem dependência obrigatória na inicialização do editor.
+[PhotoCraft](https://github.com/storytold/photocraft) é referência técnica e [ibisPaint](https://ibispaint.com/) é referência funcional; ambos são projetos diferentes. O Ibis-Lua é um projeto do mesmo criador, não o aplicativo oficial. Consulte [ORIGENS.md](ORIGENS.md), as licenças de ícones Lucide em `vendor/Ibis-Lua/assets/icons/LICENSE-LUCIDE.txt` e `LICENSE-PHOTOCRAFT-MIT.txt`.

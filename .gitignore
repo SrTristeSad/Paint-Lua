@@ -1,6 +1,6 @@
-.DS_Store
 *.love
-*.zip
 *.log
 *.npnt
+.DS_Store
 .vscode/
+__pycache__/

@@ -1,0 +1,18 @@
+-- Smoke test puro: nao exige janela nem imagens do LOVE.
+package.path=package.path..";vendor/Ibis-Lua/?.lua;vendor/Ibis-Lua/?/init.lua"
+local Model=require("src.model")
+local Bridge=require("app.paint_bridge")
+local model=Model.new()
+model:open_gallery()
+model:open_new_canvas()
+model:create_canvas(64,48)
+local bridge=Bridge.new()
+local doc=assert(bridge:sync(model))
+assert(doc.w==64 and doc.h==48 and #doc.layers==1)
+model:add_layer()
+doc=assert(bridge:sync(model))
+assert(#doc.layers==2 and doc.sel==2)
+model:toggle_layer_visibility(model.active_layer_id)
+bridge:sync(model)
+assert(doc.layers[2].visible==false)
+print("Bridge Ibis-Lua + Paint-Lua: smoke OK")
