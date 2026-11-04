@@ -33,6 +33,7 @@ jobs:
           test -f tests/test_selection_combine_v036.lua
           test -f tests/test_selection_outline_v037.lua
           test -f tests/test_selection_ants_v038.lua
+          test -f tests/test_selection_ants_love_v038.lua
           test -f app/selection_ants.lua
           test -f docs/INVERSAO_SELECAO_v035.md
           test -f docs/COMBINACAO_SELECOES_v036.md
@@ -108,6 +109,7 @@ jobs:
           unzip -Z1 Paint-Lua-v0.38-Windows.zip | grep -q '^tests/test_selection_combine_v036.lua$'
           unzip -Z1 Paint-Lua-v0.38-Windows.zip | grep -q '^tests/test_selection_outline_v037.lua$'
           unzip -Z1 Paint-Lua-v0.38-Windows.zip | grep -q '^tests/test_selection_ants_v038.lua$'
+          unzip -Z1 Paint-Lua-v0.38-Windows.zip | grep -q '^tests/test_selection_ants_love_v038.lua$'
           unzip -Z1 Paint-Lua-v0.38-Windows.zip | grep -q '^app/selection_ants.lua$'
           unzip -Z1 Paint-Lua-v0.38-Windows.zip | grep -q '^testar.bat$'
           sha256sum Paint-Lua-v0.38-Windows.zip

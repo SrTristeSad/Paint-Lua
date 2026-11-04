@@ -41,7 +41,8 @@ e sua geometria do modo v0.37:
 reutilização e descarte da GPU, fallback estático, restauração do
 shader anterior, erro propagado, geometria e drag sem contaminação.
 
-`tests/test_bridge_love.lua` renderiza o mesmo retângulo em dois
+`tests/test_selection_ants_love_v038.lua`, chamada pelo runner
+`tests/test_bridge_love.lua`, renderiza o mesmo retângulo em dois
 instantes numa `Canvas` real do LÖVE, compara pixels alterados no
 contorno e garante que o interior e as camadas permanecem intactos.
 

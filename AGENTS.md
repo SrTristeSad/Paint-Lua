@@ -113,3 +113,7 @@ sem o shader das formigas. `Bridge:drawSelection(x,y,scale,seconds)`
 tem quarto argumento opcional somente para testes determinísticos.
 Veja `tests/test_selection_ants_v038.lua`,
 `docs/CONTORNOS_ANIMADOS_v038.md` e teste GPU real no CI.
+
+Os testes reais do shader ficam em `tests/test_selection_ants_love_v038.lua`,
+chamados no fim de `tests/test_bridge_love.lua` sem criar novos locais
+na função principal (limite de 200 variáveis locais por função no Lua).
