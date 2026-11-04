@@ -41,6 +41,10 @@ local color_palette_page=0
 local color_swatch_drag=nil
 local settings_e2e=os.getenv("PAINT_LUA_SETTINGS_E2E")=="1"
 local settings_e2e_stage=0
+local selection_pause_e2e=os.getenv("PAINT_LUA_SELECTION_PAUSE_E2E")
+local selection_pause_stage=0
+local preferences_file=selection_pause_e2e and "ci-v039-editor-preferences.txt"
+    or "editor-preferences.txt"
 local gallery_selecting=false
 local gallery_dialog=nil
 local gallery_input=""
@@ -99,6 +103,7 @@ local gallery_persist_stage=0
 -- Autotestes/capturas não devem criar dados persistentes por acidente.
 local persistence_enabled=not (smoke or e2e or layer_e2e or
     settings_e2e or gallery_e2e or color_e2e or png_filter_e2e or transform_filter_e2e or
+    selection_pause_e2e or
     transform_handles_e2e or selection_combine_e2e or selection_outline_e2e or
     os.getenv('PAINT_LUA_BRIDGE_E2E')=='1' or
     os.getenv('PAINT_LUA_GALLERY_STORAGE_E2E')=='1')
@@ -276,7 +281,7 @@ local function save_preferences()
     -- Screenshot and interaction tests start with deterministic defaults.
     if smoke or e2e or settings_e2e or gallery_e2e then return end
     local ok,reason=love.filesystem.write(
-        "editor-preferences.txt",preferences:encode())
+        preferences_file,preferences:encode())
     if not ok then notice("Settings could not be saved: "..tostring(reason)) end
 end
 local function current()
@@ -2601,8 +2606,15 @@ function draw_editor_panel()
                 preferences:toggle_undo_messages()
                 save_preferences()
             end,"pref_undo_messages")
-        label("Additional settings are not yet reconstructed.",
-            bx,y+400,bw,"tiny","center",C.soft)
+        pref_toggle(y+381,"Animar contorno da seleção",
+            preferences.animate_selection_outline,
+            function()
+                preferences:toggle_selection_animation()
+                paint:setSelectionAnimation(preferences.animate_selection_outline)
+                save_preferences()
+            end,"pref_selection_animation")
+        label("Desativado: contorno estático e sem shader.",
+            bx,y+439,bw,"tiny","center",C.soft)
     elseif name=="text" then
         label("Text tool selected.",x+15,y+99,w-30,"normal","center",C.white)
         label("Editing artwork is outside the UI-only scope.",x+12,y+145,w-24,"small","center",C.soft)
@@ -2647,20 +2659,31 @@ function love.load()
         end
         if warning then notice(warning) end
     end
+    if selection_pause_e2e=='create' then
+        -- O teste usa arquivo próprio; restos de execução anterior não contam.
+        love.filesystem.remove(preferences_file)
+    end
     if not (smoke or e2e or settings_e2e or gallery_e2e) then
-        local content=love.filesystem.read("editor-preferences.txt")
+        local content=love.filesystem.read(preferences_file)
         if content then
             local ok,restored=pcall(EditorPreferences.decode,content)
             if ok then preferences=restored
             else notice("Invalid saved settings; using defaults.") end
         end
     end
+    paint:setSelectionAnimation(preferences.animate_selection_outline)
     if (e2e or settings_e2e or color_e2e)
         and os.getenv("PAINT_LUA_E2E_RES") then
         local w,h=os.getenv("PAINT_LUA_E2E_RES"):match("^(%d+)x(%d+)$")
         assert(w and h,"PAINT_LUA_E2E_RES deve ser largura x altura")
         local ok=love.window.setMode(tonumber(w),tonumber(h),{resizable=true})
         assert(ok,"Não foi possível configurar resolução de teste")
+    end
+    if selection_pause_e2e then
+        state:open_gallery();state:open_new_canvas();state:create_canvas(64,64)
+        local d=assert(paint:sync(state))
+        d.selection=require('core.selection').rect(d,8,8,40,40)
+        assert(#d.history.undo==0,'UI v0.39: a preferência não deve gerar histórico')
     end
     if selection_outline_e2e then
         state:open_gallery();state:open_new_canvas();state:create_canvas(1024,1024)
@@ -3916,6 +3939,62 @@ function love.update()
     end
     if gallery_e2e and #controls>0 then
         gallery_e2e_update()
+        return
+    end
+    if selection_pause_e2e and #controls>0 then
+        if selection_pause_e2e=='create' then
+            if selection_pause_stage==0 then
+                assert(preferences.animate_selection_outline
+                    and paint.selectionAnimated and paint.ants.shader,
+                    'UI v0.39: animação deveria iniciar ligada')
+                click_control('back')
+                assert(panel=='back','UI v0.39: Back não abriu')
+            elseif selection_pause_stage==1 then
+                click_control('back_settings')
+                assert(panel=='settings','UI v0.39: Settings não abriu')
+            elseif selection_pause_stage==2 then
+                click_control('pref_selection_animation')
+                assert(not preferences.animate_selection_outline
+                    and not paint.selectionAnimated and not paint.ants.shader,
+                    'UI v0.39: botão não desativou e liberou o shader')
+                local file=assert(love.filesystem.read(preferences_file))
+                assert(file:find('animate_selection_outline=0',1,true),
+                    'UI v0.39: opção desativada não foi salva')
+                assert(#paint.doc.history.undo==0,'UI v0.39: toggle criou histórico')
+                panel=nil
+            else
+                assert(not paint.ants.shader and not paint.selectionAnimated,
+                    'UI v0.39: modo estático compilou shader no quadro seguinte')
+                print('PASS: UI v0.39: desativação real pelo botão e gravação')
+                love.event.quit(0)
+                return
+            end
+        else
+            if selection_pause_stage==0 then
+                assert(not preferences.animate_selection_outline
+                    and not paint.selectionAnimated and not paint.ants.shader,
+                    'UI v0.39: preferência desativada não foi reaberta')
+                set_panel('settings')
+            elseif selection_pause_stage==1 then
+                click_control('pref_selection_animation')
+                assert(preferences.animate_selection_outline
+                    and paint.selectionAnimated,
+                    'UI v0.39: não reativou animação pelo botão')
+            else
+                assert(paint.ants.shader and not paint.ants.unavailable,
+                    'UI v0.39: reativação não compilou shader')
+                assert(#paint.doc.history.undo==0,
+                    'UI v0.39: preferência alterou o histórico')
+                local data=assert(love.filesystem.read(preferences_file))
+                assert(data:find('animate_selection_outline=1',1,true),
+                    'UI v0.39: animação reativada não persistiu')
+                love.filesystem.remove(preferences_file)
+                print('PASS: UI v0.39: reabertura, reativação e shader na GPU')
+                love.event.quit(0)
+                return
+            end
+        end
+        selection_pause_stage=selection_pause_stage+1
         return
     end
     if selection_outline_e2e and #controls>0 then

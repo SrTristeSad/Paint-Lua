@@ -1,4 +1,4 @@
-# Paint-Lua — Projeto único (v0.38)
+# Paint-Lua — Projeto único (v0.39)
 
 Editor experimental de pintura digital em Lua / LÖVE 11.5. A interface de Ibis-Lua e o núcleo de pintura v0.21 são **código-fonte do mesmo repositório**. Não há submódulos, download do Ibis-Lua na inicialização ou integração atual com DragonBones/Bono-Lua.
 
@@ -9,6 +9,27 @@ Editor experimental de pintura digital em Lua / LÖVE 11.5. A interface de Ibis-
 3. Execute **testar.bat** na pasta raiz. Não precisa de Git, Python, PowerShell ou conexão à internet para iniciar.
 
 Clone alternativo: git clone https://github.com/SrTristeSad/Paint-Lua.git (sem --recurse-submodules).
+
+## Novidade v0.39 — pausar animação dos contornos
+
+O editor oferece **Settings → Animar contorno da seleção** para
+ligar ou desligar o movimento das faixas `marching ants`.
+
+A animação continua **ligada por padrão**, como na v0.38. Quando a
+opção é desligada, o programa desenha o **contorno estático vermelho**
+da v0.37, **sem executar ou compilar o shader**. Se o shader já estiver
+carregado, ele é liberado; ao reativar a animação, é criado novamente.
+A geometria da seleção, inclusive inversões e contornos esparsos,
+permanece intacta, assim como os pixels, NPNT5 e undo/redo.
+
+A preferência é gravada automaticamente em `editor-preferences.txt`
+e restaurada ao abrir o aplicativo. O formato de preferências continua
+`version=1`: arquivos antigos, que não têm essa opção, usam o valor
+padrão animado; campos inválidos e duplicados seguem rejeitados.
+O teste de interface abre o editor em **duas execuções do LÖVE** para
+verificar desligar, salvar, reabrir e reativar.
+
+Veja [docs/PAUSA_CONTORNOS_v039.md](docs/PAUSA_CONTORNOS_v039.md).
 
 ## Novidade v0.38 — contornos animados (*marching ants*)
 

@@ -1865,6 +1865,7 @@ require('tests.test_selection_invert_v035')(check)
 require('tests.test_selection_combine_v036')(check)
 require('tests.test_selection_outline_v037')(check)
 require('tests.test_selection_ants_v038')(check)
+require('tests.test_selection_pause_v039')(check)
 
 print(string.format("\n%d passou, %d falhou", passed, failed))
 if failed > 0 then os.exit(1) end

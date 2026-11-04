@@ -39,9 +39,19 @@ function Bridge.new()
     stroke=nil,job=nil,jobKind=nil,selectionDrag=nil,selectionMode='replace',jobSelectionMode=nil,
     transform=nil,transformDrag=nil,
     pngPreview=nil,pngDrag=nil,
-    cache=nil,gpu={},ants={},thumbCache=setmetatable({}, {__mode='k'}),
+    cache=nil,gpu={},ants={},selectionAnimated=true,thumbCache=setmetatable({}, {__mode='k'}),
     thumbRenders=0,maskMode=nil,maskOwner=nil,
     artworkId=nil,filename='meu-desenho.npnt',status='Paint-Lua v0.27 pronto'},Bridge)
+end
+
+-- Preferência da interface, não do documento: não entra no histórico NPNT.
+-- Ao desativar, libera a GPU e volta ao traço estático da v0.37.
+function Bridge:setSelectionAnimation(enabled)
+  assert(type(enabled)=='boolean','animação de seleção deve ser booleana')
+  if self.selectionAnimated==enabled then return false end
+  self.selectionAnimated=enabled
+  if not enabled then SelectionAnts.release(self.ants) end
+  return true
 end
 
 function Bridge:dropImages()
@@ -849,7 +859,7 @@ function Bridge:drawSelection(x,y,canvasScale,seconds)
     if now==nil then
       now=love.timer and love.timer.getTime() or os.clock()
     end
-    SelectionAnts.render(g,self.ants,now,function(animated)
+    local function drawOutline(animated)
       if animated then g.setColor(1,1,1,0.95)
       else g.setColor(0.96,0.30,0.20,0.95) end
       -- A geometria é sempre a mesma da v0.37. Apenas as cores dos pixels
@@ -881,7 +891,13 @@ function Bridge:drawSelection(x,y,canvasScale,seconds)
       else
         g.rectangle('line',x+sel.x,y+sel.y,sel.w,sel.h)
       end
-    end)
+    end
+    if self.selectionAnimated then
+      SelectionAnts.render(g,self.ants,now,drawOutline)
+    else
+      -- Sem shader, sem uniform temporal e sem custo de animação.
+      drawOutline(false)
+    end
   end
   if drag then
     g.setColor(0.17,0.62,0.95,0.98)

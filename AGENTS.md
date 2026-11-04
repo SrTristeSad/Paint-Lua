@@ -117,3 +117,18 @@ Veja `tests/test_selection_ants_v038.lua`,
 Os testes reais do shader ficam em `tests/test_selection_ants_love_v038.lua`,
 chamados no fim de `tests/test_bridge_love.lua` sem criar novos locais
 na função principal (limite de 200 variáveis locais por função no Lua).
+
+### Atualização v0.39 — pausa de marching ants
+
+`src/editor_preferences.lua` mantém `animate_selection_outline=true`
+por padrão e registra `animate_selection_outline=0|1` no mesmo
+arquivo `version=1` (campo **opcional ao ler** para retrocompatibilidade).
+`Bridge:setSelectionAnimation(bool)` libera o shader quando desativado;
+`drawSelection` desenha as bordas geométricas da v0.37 no modo
+estático sem enviar uniform nem compilar shader. A interface usa
+**Settings → Animar contorno da seleção** e chama o setter tanto após
+restaurar preferências quanto depois de cada clique. O teste E2E
+`PAINT_LUA_SELECTION_PAUSE_E2E=create/check` usa arquivo de
+preferências **isolado**, em duas execuções LÖVE. Manter `main`,
+NPNT1–NPNT5, histórico e seleção fora dessa preferência. Ver
+`docs/PAUSA_CONTORNOS_v039.md` e `tests/test_selection_pause_v039.lua`.

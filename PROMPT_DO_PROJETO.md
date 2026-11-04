@@ -119,3 +119,13 @@ Sem suporte a shader o contorno anterior permanece estático. O drag
 continua azul, a prévia de transformação mantém seu desenho próprio
 e documentos/NPNT/histórico/pintura não são alterados. Testar no LÖVE
 real, inclusive diferença temporal de pixels capturados da GPU.
+
+### Estado v0.39 — animação configurável
+
+Settings tem uma opção persistente **Animar contorno da seleção**,
+inicialmente ativa. Quando desligada, a seleção volta ao contorno
+vermelho estático da v0.37 sem shader; a GPU é liberada imediatamente
+e só recompilada ao reativar. O campo opcional
+`animate_selection_outline=0|1` é aceito nos arquivos de preferências
+versão 1, mantendo os arquivos antigos válidos. Essa mudança visual
+não faz parte do NPNT nem do histórico do documento.
