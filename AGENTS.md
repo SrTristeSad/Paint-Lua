@@ -53,3 +53,7 @@ histórico, incluindo undo/redo. O algoritmo bilinear usa RGB premultiplicado
 por alfa e cobertura 4x4 nos contornos; manter a proteção de 1 milhão de pixels.
 Testes em `tests/test_transform_smooth_v033.lua` e E2E com
 `PAINT_LUA_TRANSFORM_FILTER_E2E=1 love .`. Não confundir com filtros PNG.
+
+### Integração v0.34
+
+As alças de Transformar são calculadas em `core/transform.lua` e usadas em `app/paint_bridge.lua`; manter hit-test e desenho sincronizados. Arrastar cantos preserva a proporção e o canto oposto. Alças ficam ocultas se a seleção ocupar menos de 28 px em tela. Veja `docs/ALCAS_TRANSFORMACAO_v034.md` e a suíte de testes.

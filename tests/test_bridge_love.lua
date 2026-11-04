@@ -487,3 +487,65 @@ assert(rr>0.70 and rr<0.80 and bb>0.20 and bb<0.30 and aa>0.99,
   'NPNT5 não preservou pixels da transformação suave')
 love.filesystem.remove(selectionBridge.filename)
 print('PASS: LÖVE real v0.33: suavização de seleção, filtro GPU, undo/redo, NPNT5')
+
+-- v0.34: alças de escala/rotação/movimento com ImageData real e render GPU.
+local HandlesModel=Model.new()
+HandlesModel:open_gallery();HandlesModel:open_new_canvas();HandlesModel:create_canvas(100,100)
+local handlesBridge=Bridge.new()
+local handlesDoc=assert(handlesBridge:sync(HandlesModel))
+local handlesTile,handlesKey=Doc.getTile(handlesDoc.layers[1],0,0,true)
+handlesTile:setPixel(44,44,0.9,0.1,0.05,1)
+Doc.markDirty(handlesDoc.layers[1],handlesKey)
+handlesDoc.selection=Selection.rect(handlesDoc,30,30,69,69)
+HandlesModel:set_tool('transform')
+assert(handlesBridge:startTransform(HandlesModel))
+local THandles=require('core.transform')
+local zoomHandles=handlesBridge:transformCanvasScale(HandlesModel,view,preferences,1024,768)
+local function handleMouse(px,py)
+  local u,v=(px-50)*zoomHandles,(py-50)*zoomHandles
+  return cx+u,cy+v
+end
+local function pressHandle(px,py)
+  local mx,my=handleMouse(px,py)
+  return handlesBridge:beginTransformDrag(HandlesModel,view,preferences,1,1024,768,mx,my)
+end
+local function moveHandle(px,py)
+  local mx,my=handleMouse(px,py)
+  return handlesBridge:moveTransform(HandlesModel,view,preferences,1,1024,768,mx,my)
+end
+local position=THandles.handles(handlesBridge.transform,zoomHandles)
+assert(pressHandle(position.se.x,position.se.y) and handlesBridge.transformDrag.kind=='scale',
+  'alça de escala não responde ao clique')
+assert(moveHandle(position.se.x+20,position.se.y+20))
+handlesBridge:finishTransformDrag()
+assert(math.abs(handlesBridge.transform.scaleX-1.5)<0.01,'escala da alça incorreta')
+position=THandles.handles(handlesBridge.transform,zoomHandles)
+assert(pressHandle(position.rotate.x,position.rotate.y) and
+  handlesBridge.transformDrag.kind=='rotate','alça circular não gira')
+local ux,uy=position.rotate.x-position.center.x,position.rotate.y-position.center.y
+local theta=math.pi/6
+assert(moveHandle(position.center.x+ux*math.cos(theta)-uy*math.sin(theta),
+  position.center.y+ux*math.sin(theta)+uy*math.cos(theta)))
+handlesBridge:finishTransformDrag()
+assert(math.abs(handlesBridge.transform.angle-theta)<0.01,'giro da alça incorreto')
+position=THandles.handles(handlesBridge.transform,zoomHandles)
+assert(pressHandle(position.center.x,position.center.y) and
+  handlesBridge.transformDrag.kind=='move','interior não move')
+assert(moveHandle(position.center.x+5,position.center.y+3))
+handlesBridge:finishTransformDrag()
+assert(#handlesDoc.history.undo==0 and
+  select(4,handlesTile:getPixel(44,44))==1,'prévia modificou os pixels')
+-- Executa a prévia e todos os indicadores visuais na GPU de verdade.
+assert(pcall(handlesBridge.drawSelection,handlesBridge,0,0,zoomHandles),
+  'renderização de alças no LOVE 11.5 falhou')
+assert(handlesBridge:applyTransform(HandlesModel),'aplicar alças falhou')
+assert(#handlesDoc.history.undo==1,'alças criaram entradas adicionais no histórico')
+assert(handlesBridge:historyStep(HandlesModel,false),'undo das alças falhou')
+assert(select(4,assert(handlesDoc.layers[1].tiles['0,0']):getPixel(44,44))==1,
+  'undo não restaurou origem')
+assert(handlesBridge:historyStep(HandlesModel,true),'redo das alças falhou')
+handlesBridge.filename='ci-paint-lua-v034.npnt'
+assert(handlesBridge:save(),'não salvou seleção transformada por mouse')
+assert(handlesBridge:load(HandlesModel),'não reabriu seleção transformada por mouse')
+love.filesystem.remove(handlesBridge.filename)
+print('PASS: LÖVE real v0.34: alças GPU, escala, giro, movimento, undo/redo e NPNT5')

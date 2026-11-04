@@ -85,6 +85,8 @@ local png_filter_e2e=os.getenv('PAINT_LUA_PNG_FILTER_E2E')=='1'
 local png_filter_e2e_stage=0
 local transform_filter_e2e=os.getenv('PAINT_LUA_TRANSFORM_FILTER_E2E')=='1'
 local transform_filter_e2e_stage=0
+local transform_handles_e2e=os.getenv('PAINT_LUA_TRANSFORM_HANDLES_E2E')=='1'
+local transform_handles_e2e_stage=0
 local gallery_e2e = os.getenv("PAINT_LUA_GALLERY_E2E") == "1"
 local gallery_e2e_stage = 0
 local gallery_persist_e2e=os.getenv('PAINT_LUA_GALLERY_PERSIST_E2E')
@@ -92,6 +94,7 @@ local gallery_persist_stage=0
 -- Autotestes/capturas não devem criar dados persistentes por acidente.
 local persistence_enabled=not (smoke or e2e or layer_e2e or
     settings_e2e or gallery_e2e or color_e2e or png_filter_e2e or transform_filter_e2e or
+    transform_handles_e2e or
     os.getenv('PAINT_LUA_BRIDGE_E2E')=='1' or
     os.getenv('PAINT_LUA_GALLERY_STORAGE_E2E')=='1')
 local smoke_screen = os.getenv("PAINT_LUA_SCREEN") or "title"
@@ -1302,6 +1305,8 @@ local function editor_screen()
                 notice(paint.status)
             end,'transform_mode_'..item[2])
         end
+        label('Cantos: escala  |  Topo: giro',ox+343,filterY+8,190,
+            'tiny','left',C.white)
         local buttons={
             {'-15°',function() paint:adjustTransform(0,0,1,-math.pi/12) end},
             {'+15°',function() paint:adjustTransform(0,0,1,math.pi/12) end},
@@ -2628,6 +2633,16 @@ function love.load()
         local ok=love.window.setMode(tonumber(w),tonumber(h),{resizable=true})
         assert(ok,"Não foi possível configurar resolução de teste")
     end
+    if transform_handles_e2e then
+        state:open_gallery();state:open_new_canvas();state:create_canvas(100,100)
+        local doc=assert(paint:sync(state))
+        local tile,key=require('core.doc').getTile(doc.layers[doc.sel],0,0,true)
+        tile:setPixel(44,44,0.91,0.12,0.05,1)
+        require('core.doc').markDirty(doc.layers[doc.sel],key)
+        doc.selection=require('core.selection').rect(doc,30,30,69,69)
+        state:set_tool('transform')
+        assert(paint:startTransform(state))
+    end
     if transform_filter_e2e then
         state:open_gallery();state:open_new_canvas();state:create_canvas(64,64)
         local doc=assert(paint:sync(state))
@@ -3724,6 +3739,56 @@ function love.update()
     if smoke and capture_done then
         if capture_error then error("Screenshot: "..capture_error) end
         love.event.quit(0)
+    end
+    if transform_handles_e2e and #controls>0 then
+        local Transform=require('core.transform')
+        local ds=assert(paint:transformCanvasScale(state,view,preferences,W,H))
+        local left=preferences.tool_position=='left' and 62 or 0
+        local right=preferences.tool_position=='right' and 75 or 34
+        local cx=left+(W-left-right)/2+view.pan_x
+        local cy=62+(H-160)/2+view.pan_y
+        local function windowPos(px,py)
+            local u,v=(px-50)*ds,(py-50)*ds
+            local a=view.rotation
+            return (cx+u*math.cos(a)-v*math.sin(a))*scale,
+                (cy+u*math.sin(a)+v*math.cos(a))*scale
+        end
+        local function drag(x0,y0,x1,y1,kind)
+            local ax,ay=windowPos(x0,y0)
+            local bx,by=windowPos(x1,y1)
+            love.mousepressed(ax,ay,1)
+            assert(paint.transformDrag and paint.transformDrag.kind==kind,
+                'UI real: alça não iniciou gesto '..kind)
+            love.mousemoved(bx,by,bx-ax,by-ay)
+            love.mousereleased(bx,by,1)
+        end
+        local h=Transform.handles(paint.transform,ds)
+        if transform_handles_e2e_stage==0 then
+            drag(h.se.x,h.se.y,h.se.x+20,h.se.y+20,'scale')
+            assert(math.abs(paint.transform.scaleX-1.5)<0.01,
+                'UI real: canto não redimensionou')
+            transform_handles_e2e_stage=1
+        elseif transform_handles_e2e_stage==1 then
+            local ux,uy=h.rotate.x-h.center.x,h.rotate.y-h.center.y
+            local a=math.pi/6
+            drag(h.rotate.x,h.rotate.y,
+                h.center.x+ux*math.cos(a)-uy*math.sin(a),
+                h.center.y+ux*math.sin(a)+uy*math.cos(a),'rotate')
+            assert(math.abs(paint.transform.angle-a)<0.01,
+                'UI real: alça de rotação não alterou ângulo')
+            transform_handles_e2e_stage=2
+        else
+            drag(h.center.x,h.center.y,h.center.x+5,h.center.y+3,'move')
+            assert(#paint.doc.history.undo==0,'UI: alças modificaram histórico na prévia')
+            click_control('transform_action_6')
+            assert(paint.transform==nil and #paint.doc.history.undo==1,
+                'UI: Aplicar criou histórico incorreto')
+            assert(paint:historyStep(state,false),'UI: undo do gesto falhou')
+            assert(paint:historyStep(state,true),'UI: redo do gesto falhou')
+            print('PASS: interface LÖVE v0.34: mouse nas alças, giro, escala, mover, undo/redo')
+            love.event.quit(0)
+        end
+        return
     end
     if transform_filter_e2e and #controls>0 then
         if transform_filter_e2e_stage==0 then

@@ -613,17 +613,73 @@ function Bridge:adjustTransform(dx,dy,scale,angle)
   return true
 end
 
+-- Escala visual para detectar alças sempre com o mesmo raio em tela,
+-- mesmo quando o usuário aplica zoom, pan ou rotação no canvas.
+function Bridge:transformCanvasScale(model,view,prefs,W,H)
+  local left=prefs.tool_position=='left' and 62 or 0
+  local right=prefs.tool_position=='right' and 75 or 34
+  local aw,ah=W-left-right,H-160
+  if aw<=0 or ah<=0 or not self.doc then return nil end
+  return math.min(aw/self.doc.w,ah/self.doc.h,1.1)*view.zoom
+end
+
+local oppositeCorner={nw='se',ne='sw',se='nw',sw='ne'}
+local transformCorners={'nw','ne','se','sw'}
+local function dragAngle(y,x)
+  return math.atan2 and math.atan2(y,x) or math.atan(y,x)
+end
 function Bridge:beginTransformDrag(model,view,prefs,uiScale,W,H,rx,ry)
   if model.active_tool~='transform' then return false end
   if not self:startTransform(model) then return false end
-  local px,py=self:point(model,view,prefs,uiScale,W,H,rx,ry)
+  -- Não usar :point(): alças de rotação podem estar fora do documento.
+  local px,py=self:toCanvas(model,view,prefs,uiScale,W,H,rx,ry)
   if not px then return false end
-  local b=Transform.bounds(self.transform)
-  if px<b.x or py<b.y or px>b.x+b.w or py>b.y+b.h then
-    self.status='Clique dentro dos limites da seleção para mover'
-    return false
+  local t=self.transform
+  local visualScale=self:transformCanvasScale(model,view,prefs,W,H)
+  if not visualScale or visualScale<=0 then return false end
+  local h=Transform.handles(t,visualScale)
+  local radius=12/visualScale
+  local closest,best=nil,radius*radius
+  -- Um único pixel selecionado ainda precisa poder ser ARRASTADO.
+  -- Quando as alças se sobrepõem (<28px de tela por lado), os botões
+  -- antigos ampliam a seleção até existir espaço para os controles.
+  local enoughRoom=math.min(t.w*math.abs(t.scaleX),
+    t.h*math.abs(t.scaleY))*visualScale>=28
+  if enoughRoom then
+    for _,name in ipairs({'rotate','nw','ne','se','sw'}) do
+      local dx,dy=px-h[name].x,py-h[name].y
+      local sq=dx*dx+dy*dy
+      if sq<best then closest,best=name,sq end
+    end
   end
-  self.transformDrag={x=px,y=py,dx=self.transform.dx,dy=self.transform.dy}
+  local drag={x=px,y=py,dx=t.dx,dy=t.dy,
+    scaleX=t.scaleX,scaleY=t.scaleY,angle=t.angle}
+  if closest=='rotate' then
+    local pivot=h.center
+    drag.kind='rotate'
+    drag.pivotX,drag.pivotY=pivot.x,pivot.y
+    drag.startAngle=dragAngle(py-pivot.y,px-pivot.x)
+    self.status='Girando seleção pela alça superior'
+  elseif closest then
+    drag.kind='scale'
+    drag.corner=closest
+    local anchor=h[oppositeCorner[closest]]
+    local corner=h[closest]
+    drag.anchorX,drag.anchorY=anchor.x,anchor.y
+    drag.cornerX,drag.cornerY=corner.x,corner.y
+    drag.vx,drag.vy=corner.x-anchor.x,corner.y-anchor.y
+    self.status='Redimensionando seleção; proporção preservada'
+  else
+    -- Hit-test na forma girada, não no retângulo envolvente.
+    local sx,sy=Transform.inverse(t,px,py)
+    if sx<t.x or sx>t.x+t.w or sy<t.y or sy>t.y+t.h then
+      self.status='Arraste dentro da seleção ou pelas alças'
+      return false
+    end
+    drag.kind='move'
+    self.status='Movendo seleção'
+  end
+  self.transformDrag=drag
   return true
 end
 
@@ -631,11 +687,43 @@ function Bridge:moveTransform(model,view,prefs,uiScale,W,H,rx,ry)
   if not self.transform or not self.transformDrag then return false end
   local px,py=self:toCanvas(model,view,prefs,uiScale,W,H,rx,ry)
   if not px then return false end
-  local d=self.transformDrag
-  local t=self.transform
-  local ok,err=pcall(Transform.set,t,d.dx+px-d.x,d.dy+py-d.y,
-    t.scaleX,t.scaleY,t.angle)
-  if not ok then self.status=tostring(err);return false end
+  local d,t=self.transformDrag,self.transform
+  local dx,dy,sx,sy,angle=d.dx,d.dy,d.scaleX,d.scaleY,d.angle
+  if d.kind=='move' then
+    dx,dy=d.dx+px-d.x,d.dy+py-d.y
+  elseif d.kind=='rotate' then
+    local current=dragAngle(py-d.pivotY,px-d.pivotX)
+    local delta=current-d.startAngle
+    -- Evita saltos ao atravessar -180°/+180°.
+    delta=dragAngle(math.sin(delta),math.cos(delta))
+    angle=d.angle+delta
+  elseif d.kind=='scale' then
+    -- O canto oposto é a âncora fixa. Movimento proporcional da diagonal
+    -- permite redimensionar com mouse sem inverter a imagem.
+    local vx,vy=d.vx,d.vy
+    local denominator=vx*vx+vy*vy
+    if denominator<1e-12 then return false end
+    local tx,ty=d.cornerX+(px-d.x)-d.anchorX,
+      d.cornerY+(py-d.y)-d.anchorY
+    local factor=(tx*vx+ty*vy)/denominator
+    local minimum=math.max(0.125/math.abs(d.scaleX),0.125/math.abs(d.scaleY))
+    local maximum=math.min(8/math.abs(d.scaleX),8/math.abs(d.scaleY))
+    factor=clamp(factor,minimum,maximum)
+    sx,sy=d.scaleX*factor,d.scaleY*factor
+    -- Refaz a posição do canto oposto sem alterar o ângulo original.
+    local cx,cy=t.x+t.w/2,t.y+t.h/2
+    local ax,ay
+    if d.corner=='nw' then ax,ay=t.x+t.w,t.y+t.h
+    elseif d.corner=='ne' then ax,ay=t.x,t.y+t.h
+    elseif d.corner=='se' then ax,ay=t.x,t.y
+    else ax,ay=t.x+t.w,t.y end
+    local ux,uy=(ax-cx)*sx,(ay-cy)*sy
+    local translatedX=cx+ux*math.cos(angle)-uy*math.sin(angle)
+    local translatedY=cy+ux*math.sin(angle)+uy*math.cos(angle)
+    dx,dy=d.anchorX-translatedX,d.anchorY-translatedY
+  else return false end
+  local ok,err=pcall(Transform.set,t,dx,dy,sx,sy,angle)
+  if not ok then self.status='Ajuste inválido: '..tostring(err);return false end
   return true
 end
 
@@ -693,9 +781,9 @@ function Bridge:drawSelection(x,y,canvasScale)
   g.setLineWidth(1/math.max(canvasScale,0.01))
   g.setColor(0.96,0.30,0.20,0.95)
   if self.transform then
-    Transform.drawPreview(self.transform,x,y)
+    Transform.drawPreview(self.transform,x,y,canvasScale)
   end
-  if sel then
+  if sel and not self.transform then
     if sel.kind=='polygon' then
       local p=sel.points
       for i=1,#p do
