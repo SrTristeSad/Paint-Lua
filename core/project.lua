@@ -1,16 +1,18 @@
--- Formato nativo .npnt, versões NPNT1/NPNT2/NPNT3/NPNT4: arquivo binário com metadados
+-- Formato nativo .npnt, versões NPNT1 a NPNT5: arquivo binário com metadados
 -- prefixados por tamanho e tiles guardados como PNGs independentes.
 -- Não executa código do arquivo ao abrir (sem loadstring / serialização Lua).
 -- Acesso a disco é feito exclusivamente por love.filesystem (save directory).
 local Doc = require("core.doc")
 local Mask = require("core.mask")
 local Blend = require("core.blend")
+local Selection = require('core.selection')
 
 local P = {}
 local MAGIC = "NPNT1\n"
 local MAGIC2 = "NPNT2\n"
 local MAGIC3 = "NPNT3\n"
 local MAGIC4 = "NPNT4\n"
+local MAGIC5 = "NPNT5\n"
 local MAX_TEXT = 1024 * 1024
 local MAX_PNG = 16 * 1024 * 1024
 local PNG_SIGNATURE = "\137PNG\r\n\26\n"
@@ -89,8 +91,11 @@ local function encode(doc)
   assert(type(doc.tool) == "string" and #doc.tool <= 128, "ferramenta inválida")
   assert(validNumber(doc.size, 0, 100000) and validNumber(doc.opacity, 0, 100), "configuração de ferramenta inválida")
 
-  local grouped = next(doc.groups or {}) ~= nil
-  local modern = false
+  local complex = doc.selection and
+    (doc.selection.kind=='polygon' or doc.selection.kind=='wand')
+  if complex then Selection.validate(doc,doc.selection) end
+  local grouped = next(doc.groups or {}) ~= nil or not not complex
+  local modern = not not complex
   local extended = grouped
   for _, layer in ipairs(doc.layers) do
     if layer.clipped or layer.groupId then grouped = true; extended = true end
@@ -102,7 +107,8 @@ local function encode(doc)
     if g.parentId or g.mask then modern = true end
   end
   if grouped then require('core.groups').validate(doc) end
-  local parts = {modern and MAGIC4 or (grouped and MAGIC3 or (extended and MAGIC2 or MAGIC))}
+  local parts = {complex and MAGIC5 or (modern and MAGIC4 or
+    (grouped and MAGIC3 or (extended and MAGIC2 or MAGIC)))}
   writeNum(parts, doc.w)
   writeNum(parts, doc.h)
   writeBlob(parts, doc.name)
@@ -195,6 +201,18 @@ local function encode(doc)
       writeNum(parts, layer.groupId or 0)
     end
   end
+  if complex then
+    if doc.selection.kind=='polygon' then
+      writeNum(parts,1)
+      writeNum(parts,#doc.selection.points)
+      for _,p in ipairs(doc.selection.points) do
+        writeNum(parts,p[1]);writeNum(parts,p[2])
+      end
+    else
+      writeNum(parts,2)
+      writeMask(parts,doc.selection.mask,limitX,limitY)
+    end
+  end
   return table.concat(parts)
 end
 
@@ -267,13 +285,15 @@ end
 
 local function decode(bytes)
   assert(type(bytes) == 'string', 'projeto deve ser texto binário')
-  local modern = bytes:sub(1,#MAGIC4)==MAGIC4
+  local v5 = bytes:sub(1,#MAGIC5)==MAGIC5
+  local modern = v5 or bytes:sub(1,#MAGIC4)==MAGIC4
   local grouped = modern or bytes:sub(1,#MAGIC3)==MAGIC3
   local extended = grouped or bytes:sub(1,#MAGIC2)==MAGIC2
   assert(extended or bytes:sub(1,#MAGIC)==MAGIC,
     'assinatura ou versão de projeto incompatível')
   local r = reader(bytes)
-  r.pos = #(modern and MAGIC4 or (grouped and MAGIC3 or (extended and MAGIC2 or MAGIC))) + 1
+  r.pos = #(v5 and MAGIC5 or (modern and MAGIC4 or
+    (grouped and MAGIC3 or (extended and MAGIC2 or MAGIC)))) + 1
   local w, h = readInt(r, 1, 65536), readInt(r, 1, 65536)
   local name = readBlob(r, MAX_TEXT)
   local layerCount = readInt(r, 1, MAX_LAYERS)
@@ -362,6 +382,24 @@ local function decode(bytes)
     doc.layers[i] = layer
   end
   if grouped then require('core.groups').validate(doc) end
+  if v5 then
+    assert(selection~=nil,'NPNT5 exige seleção complexa')
+    local shape=readInt(r,1,2)
+    if shape==1 then
+      local points={}
+      local count=readInt(r,3,4096)
+      for i=1,count do
+        points[i]={readInt(r,0,doc.w),readInt(r,0,doc.h)}
+      end
+      selection.kind='polygon'
+      selection.points=points
+    else
+      selection.kind='wand'
+      selection.mask=readMask(r,maxTX,maxTY)
+      assert(selection.mask~=nil,'máscara de varinha ausente')
+    end
+    Selection.validate(doc,selection)
+  end
   assert(r.pos == #bytes + 1, "dados adicionais inesperados")
   -- Histórico recém-inicializado por Doc.new. Nenhuma imagem GPU é restaurada;
   -- Render.refresh irá reconstruir o cache a partir dos tiles sujos.

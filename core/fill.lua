@@ -5,6 +5,7 @@
 local Doc = require('core.doc')
 local Hist = require('core.history')
 local Job = require('core.job')
+local Selection = require('core.selection')
 
 local F = {}
 local floor, abs, max = math.floor, math.abs, math.max
@@ -62,6 +63,7 @@ local function prepare(doc, layer, x, y, color, tol, selection)
     if x0 >= x1 or y0 >= y1 then return nil end
   end
   if x < x0 or x >= x1 or y < y0 or y >= y1 then return nil end
+  if selection and not Selection.contains(selection,x,y) then return nil end
 
   local tr, tg, tb, ta = pixel(layer, x, y)
   local target = {tr, tg, tb, ta}
@@ -70,7 +72,7 @@ local function prepare(doc, layer, x, y, color, tol, selection)
   return {
     doc=doc, layer=layer, h=doc.history, x=x, y=y,
     color={cr,cg,cb,ca}, tol=tol, target=target,
-    x0=x0, y0=y0, x1=x1, y1=y1,
+    x0=x0, y0=y0, x1=x1, y1=y1, selection=selection,
     -- Se a cor nova ainda satisfaz a tolerância, precisamos registrar
     -- segmentos visitados, porque os próprios pixels não servem de marca.
     track=distance(cr,cg,cb,ca,target)<=tol,
@@ -145,7 +147,8 @@ local function run(s, yieldEvery)
 
   local readTx, readTy, readTile
   local function matches(px, py)
-    if px < x0 or px >= x1 or py < y0 or py >= y1 or visited(py, px) then return false end
+    if px < x0 or px >= x1 or py < y0 or py >= y1 or visited(py, px)
+      or (s.selection and not Selection.contains(s.selection,px,py)) then return false end
     checkpoint()
     local tx, ty = floor(px / TILE), floor(py / TILE)
     if tx ~= readTx or ty ~= readTy then

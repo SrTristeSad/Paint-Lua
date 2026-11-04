@@ -34,6 +34,9 @@ local function valid01(x)
 end
 local function copy(t)
   if type(t) ~= "table" then return t end
+  -- Máscaras raster de seleção são imutáveis enquanto há gesto ativo:
+  -- não duplicar centenas de milhares de pixels por pincelada.
+  if t.kind == 'wand' and t.mask then return t end
   local result = {}
   for k, v in pairs(t) do result[k] = copy(v) end
   return result
@@ -108,6 +111,7 @@ function Stroke.new(doc, layer, history, opts)
     assert(valid01(opts.pressureMinOpacity), "pressão mínima de opacidade inválida")
   end
   local o = copy(opts) -- o chamador pode editar configurações após iniciar o traço
+  if o.selection == nil and doc.selection then o.selection = doc.selection end
   if o.target == "mask" then o._maskTarget = layer.mask end
   for _, key in ipairs({"pressureCurve", "pressureSizeCurve", "pressureOpacityCurve"}) do
     if o[key] ~= nil then

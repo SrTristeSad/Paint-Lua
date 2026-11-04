@@ -7,6 +7,7 @@ local Composite = require("core.composite")
 local Project = require("core.project")
 local Fill = require('core.fill')
 local Job = require('core.job')
+local Selection = require('core.selection')
 
 local Bridge = {}
 Bridge.__index = Bridge
@@ -27,8 +28,8 @@ end
 
 function Bridge.new()
   return setmetatable({doc=nil,modelDocument=nil,byId={},uiByLayer={},
-    stroke=nil,job=nil,cache=nil,gpu={},
-    filename='meu-desenho.npnt',status='Motor v0.21 conectado'},Bridge)
+    stroke=nil,job=nil,jobKind=nil,selectionDrag=nil,cache=nil,gpu={},
+    filename='meu-desenho.npnt',status='Paint-Lua v0.23 pronto'},Bridge)
 end
 
 function Bridge:dropImages()
@@ -41,7 +42,12 @@ function Bridge:dropImages()
 end
 
 function Bridge:cancelJob()
-  if self.job then Job.cancel(self.job);self.job=nil;self.status='Preenchimento cancelado' end
+  if self.job then
+    local kind=self.jobKind
+    Job.cancel(self.job)
+    self.job=nil;self.jobKind=nil
+    self.status=kind=='wand' and 'Seleção por cor cancelada' or 'Preenchimento cancelado'
+  end
 end
 
 -- Aplica somente diferenças efetivas. Uma interação de camada produz um
@@ -53,6 +59,7 @@ function Bridge:sync(model)
     self:finish(true)
     self:cancelJob()
     self:dropImages()
+    self.selectionDrag=nil
     self.doc=Doc.new(model.document.width,model.document.height,'Paint-Lua')
     self.doc.layers={}
     self.byId={}
@@ -183,7 +190,7 @@ function Bridge:bucket(model,px,py,opacity)
   local ok,job=pcall(Fill.newJob,self.doc,self.doc.layers[self.doc.sel],px,py,c,0.04,
     self.doc.selection,{yieldEvery=512})
   if not ok then self.status='Balde: '..tostring(job);return false end
-  self.job=job
+  self.job=job;self.jobKind='fill'
   self.status='Preenchendo...'
   return true
 end
@@ -215,6 +222,140 @@ function Bridge:press(model,view,prefs,uiScale,W,H,rx,ry,opacity)
   return true
 end
 
+
+-- Selecao eh um estado do documento e participa do historico estrutural.
+-- Objetos complexos ficam imutaveis depois de aplicados.
+function Bridge:applySelection(selection)
+  if not self.doc or self.stroke or self.job then return false end
+  if selection then Selection.validate(self.doc,selection) end
+  local previous=self.doc.selection
+  if previous==selection then return false end
+  if previous==nil and selection==nil then return false end
+  History.recordStructure(self.doc)
+  self.doc.selection=selection
+  if selection then
+    self.status=selection.kind=='polygon' and 'Laço selecionado'
+      or (selection.kind=='wand' and 'Área selecionada por cor' or 'Retângulo selecionado')
+  else self.status='Seleção removida' end
+  return true
+end
+
+function Bridge:selectAll(model)
+  local doc=self:sync(model)
+  if not doc then return false end
+  return self:applySelection(Selection.rect(doc,0,0,doc.w-1,doc.h-1))
+end
+
+function Bridge:clearSelection()
+  self.selectionDrag=nil
+  return self:applySelection(nil)
+end
+
+function Bridge:beginSelection(model,view,prefs,uiScale,W,H,rx,ry)
+  if self.stroke or self.job then return false end
+  local tool=model.active_tool
+  if tool~='selection_rect' and tool~='lasso' and tool~='magic_wand' then
+    return false
+  end
+  local px,py=self:point(model,view,prefs,uiScale,W,H,rx,ry)
+  if not px then return false end
+  if tool=='magic_wand' then
+    local job=Selection.newWandJob(self.doc,self.doc.layers[self.doc.sel],px,py,0.08,
+      {yieldEvery=512,maxPixels=2000000})
+    self.job=job;self.jobKind='wand'
+    self.status='Selecionando área por cor...'
+    return true
+  end
+  self.selectionDrag={kind=tool,startX=px,startY=py,x=px,y=py,
+    points=tool=='lasso' and {{px,py}} or nil}
+  return true
+end
+
+function Bridge:moveSelection(model,view,prefs,uiScale,W,H,rx,ry)
+  local drag=self.selectionDrag
+  if not drag then return false end
+  local px,py=self:toCanvas(model,view,prefs,uiScale,W,H,rx,ry)
+  if not px then return false end
+  px=clamp(px,0,self.doc.w);py=clamp(py,0,self.doc.h)
+  drag.x,drag.y=px,py
+  if drag.points and #drag.points<4096 then
+    local prev=drag.points[#drag.points]
+    local dx,dy=px-prev[1],py-prev[2]
+    if dx*dx+dy*dy>=2 then drag.points[#drag.points+1]={px,py} end
+  end
+  return true
+end
+
+function Bridge:finishSelection(model,view,prefs,uiScale,W,H,rx,ry)
+  local drag=self.selectionDrag
+  if not drag then return false end
+  if rx then self:moveSelection(model,view,prefs,uiScale,W,H,rx,ry) end
+  self.selectionDrag=nil
+  local selection
+  if drag.kind=='selection_rect' then
+    selection=Selection.rect(self.doc,drag.startX,drag.startY,drag.x,drag.y)
+  elseif drag.points and #drag.points>=3 then
+    local ok,value=pcall(Selection.polygon,self.doc,drag.points)
+    if not ok then self.status='Laço inválido: '..tostring(value);return false end
+    selection=value
+  end
+  if not selection then self.status='Seleção vazia';return false end
+  return self:applySelection(selection)
+end
+
+-- A UI fornece transformacao/zoom antes da chamada; as coordenadas locais
+-- da borda são iguais às usadas por Bridge:draw para os tiles.
+function Bridge:drawSelection(x,y,canvasScale)
+  if not self.doc then return end
+  local sel=self.doc.selection
+  local drag=self.selectionDrag
+  if not sel and not drag then return end
+  local g=love.graphics
+  g.setLineWidth(1/math.max(canvasScale,0.01))
+  g.setColor(0.96,0.30,0.20,0.95)
+  if sel then
+    if sel.kind=='polygon' then
+      local p=sel.points
+      for i=1,#p do
+        local a,b=p[i],p[i%#p+1]
+        g.line(x+a[1],y+a[2],x+b[1],y+b[2])
+      end
+    elseif sel.kind=='wand' then
+      if not self.selectionOutline or self.selectionOutline.selection~=sel then
+        self.selectionOutline={selection=sel,segments=Selection.outline(sel)}
+      end
+      local segments=self.selectionOutline.segments
+      if segments then
+        for _,edge in ipairs(segments) do
+          g.line(x+edge[1],y+edge[2],x+edge[3],y+edge[4])
+        end
+      else
+        -- Fallback para áreas imensas: só a moldura; o interior continua
+        -- sendo a máscara raster exata usada pelo pincel e pelo balde.
+        g.rectangle('line',x+sel.x,y+sel.y,sel.w,sel.h)
+      end
+    else
+      g.rectangle('line',x+sel.x,y+sel.y,sel.w,sel.h)
+    end
+  end
+  if drag then
+    g.setColor(0.17,0.62,0.95,0.98)
+    if drag.kind=='selection_rect' then
+      local ax,ay,bx,by=drag.startX,drag.startY,drag.x,drag.y
+      g.rectangle('line',x+math.min(ax,bx),y+math.min(ay,by),
+        math.abs(bx-ax),math.abs(by-ay))
+    elseif drag.points then
+      local p=drag.points
+      for i=2,#p do
+        g.line(x+p[i-1][1],y+p[i-1][2],x+p[i][1],y+p[i][2])
+      end
+      local a=p[#p]
+      g.line(x+a[1],y+a[2],x+p[1][1],y+p[1][2])
+    end
+  end
+  g.setColor(1,1,1,1)
+end
+
 function Bridge:move(model,view,prefs,uiScale,W,H,rx,ry)
   if not self.stroke then return false end
   local x,y=self:toCanvas(model,view,prefs,uiScale,W,H,rx,ry)
@@ -239,14 +380,19 @@ end
 function Bridge:update()
   if not self.job then return end
   local job=self.job
+  local kind=self.jobKind
   local ok,done,value=pcall(Job.step,job,0.004,love.timer and love.timer.getTime or os.clock)
   if not ok then
-    self.job=nil
-    self.status='Balde: '..tostring(done)
+    self.job=nil;self.jobKind=nil
+    self.status=(kind=='wand' and 'Varinha: ' or 'Balde: ')..tostring(done)
     return self.status
   elseif done then
-    self.job=nil
-    self.status='Preenchimento: '..tostring(value or 0)..' pixels'
+    self.job=nil;self.jobKind=nil
+    if kind=='wand' then
+      if value then self:applySelection(value) else self.status='Seleção vazia' end
+    else
+      self.status='Preenchimento: '..tostring(value or 0)..' pixels'
+    end
     return self.status
   end
 end
@@ -286,7 +432,8 @@ end
 
 function Bridge:save()
   if not self.doc then return nil,'nenhum documento' end
-  if self.job then return nil,'balde em andamento' end
+  if self.job then return nil,'operação em andamento' end
+  if self.selectionDrag then return nil,'finalize a seleção antes de salvar' end
   self:finish(false)
   local ok,err=Project.save(self.doc,self.filename)
   self.status=ok and ('Salvo: '..self.filename) or ('Erro: '..tostring(err))
@@ -296,6 +443,7 @@ end
 function Bridge:load(model)
   self:finish(true)
   self:cancelJob()
+  self.selectionDrag=nil
   local ok,doc,err=pcall(Project.load,self.filename)
   if not ok or not doc then
     self.status='Abertura: '..tostring(ok and err or doc)
@@ -321,10 +469,11 @@ end
 function Bridge:historyStep(model,redo)
   if model.screen~='editor' then return false end
   if self.job then
-    self.status='Finalize ou cancele o balde antes do histórico'
+    self.status='Finalize ou cancele o trabalho antes do histórico'
     return false
   end
   self:finish(false)
+  self.selectionDrag=nil
   self:sync(model)
   if not self.doc then return false end
   local fn=redo and History.redo or History.undo
@@ -339,6 +488,8 @@ function Bridge:key(model,key)
   if model.screen~='editor' then return false end
   local k=love.keyboard
   if not (k and k.isDown('lctrl','rctrl','lgui','rgui')) then return false end
+  if key=='a' then self:selectAll(model);return true end
+  if key=='d' then self:clearSelection();return true end
   if key=='s' then self:sync(model);self:save();return true end
   if key=='o' then self:load(model);return true end
   if key=='z' then self:historyStep(model,false);return true end

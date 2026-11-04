@@ -225,6 +225,7 @@ function H.capture(doc)
       maskDefault=g.mask and g.mask.default}
   end
   return {layers = layers, props = props, sel = doc.sel,
+    selection = doc.selection, -- objetos de seleção são imutáveis depois do commit
     groups = groups, nextGroupId = doc.nextGroupId or 1}
 end
 
@@ -252,6 +253,7 @@ local function restore(doc, snap)
   end
   doc.nextGroupId = snap.nextGroupId or 1
   doc.sel = snap.sel
+  doc.selection = snap.selection
 end
 
 -- Chamar ANTES de alterar a estrutura. Limpa o refazer.

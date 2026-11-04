@@ -1001,6 +1001,7 @@ local function editor_screen()
     paint:sync(state)
     paint:draw(-dw/2,-dh/2)
     draw_view_guides(dw,dh,actual_scale)
+    paint:drawSelection(-dw/2,-dh/2,actual_scale)
     rgba(C.deep,0.22)
     love.graphics.setLineWidth(1/math.max(0.05,actual_scale))
     love.graphics.rectangle("line",-dw/2,-dh/2,dw,dh)
@@ -1204,7 +1205,41 @@ function draw_editor_panel()
         stabilizer="Stabilizer",shape="Shape",ruler="Ruler",material="Material",
         text="Text"}
     draw_panel_box(x,y,w,h,titles[name] or name)
-    if name=="view" then
+    if name=="selection" then
+        local options={
+            {"Retângulo", "selection_rect"},
+            {"Laço livre", "lasso"},
+            {"Varinha mágica", "magic_wand"},
+        }
+        for i,item in ipairs(options) do
+            local yy=y+48+(i-1)*45
+            local selected=state.active_tool==item[2]
+            rectangle(x+15,yy,w-30,36,
+                selected and C.accent or C.panel_head,selected and 0.80 or 0.9,7)
+            label(item[1],x+28,yy+9,w-56,"small","left",C.white)
+            local tool=item[2]
+            hit(x+15,yy,w-30,36,function()
+                state:set_tool(tool)
+                panel=nil;state.active_panel=nil
+                notice(item[1]..": arraste sobre a tela")
+            end,"selection_tool_"..tool)
+        end
+        local function action(yy,text,fn,key)
+            rectangle(x+15,yy,w-30,36,C.deep,0.84,7)
+            label(text,x+28,yy+9,w-56,"small","left",C.white)
+            hit(x+15,yy,w-30,36,function()
+                fn()
+                notice(paint.status)
+                panel=nil;state.active_panel=nil
+            end,key)
+        end
+        action(y+197,"Selecionar tudo",function() paint:selectAll(state) end,
+            "selection_all")
+        action(y+240,"Desmarcar",function() paint:clearSelection() end,
+            "selection_clear")
+        label("Ctrl+A: tudo   Ctrl+D: desmarcar",x+12,y+292,w-24,
+            "tiny","center",C.soft)
+    elseif name=="view" then
         local bx=x+12
         local function option(yy,title,enabled,action,key)
             rectangle(bx,yy,w-24,34,C.white,over(bx,yy,w-24,34) and 0.13 or 0.04,2)
@@ -2261,6 +2296,12 @@ function love.mousepressed(rx,ry,button)
     end
     if state.screen=="editor" and not panel
         and not love.keyboard.isDown("space")
+        and paint:beginSelection(state,view,preferences,scale,W,H,rx,ry) then
+        if state.active_tool=="magic_wand" then notice(paint.status) end
+        return
+    end
+    if state.screen=="editor" and not panel
+        and not love.keyboard.isDown("space")
         and paint:press(state,view,preferences,scale,W,H,rx,ry,opacity) then
         if state.active_tool=="eyedropper" then
             local c=state.color
@@ -2330,11 +2371,18 @@ function love.mousemoved(rx,ry,dx,dy)
         if love.keyboard.isDown("space") then view:pan_to(rx/scale,ry/scale)
         else view:end_pan() end
     end
+    if paint.selectionDrag then
+        paint:moveSelection(state,view,preferences,scale,W,H,rx,ry)
+    end
     if paint.stroke then paint:move(state,view,preferences,scale,W,H,rx,ry) end
 end
 function love.mousereleased(rx,ry,button)
     if button~=1 then return end
     paint:finish(false)
+    if paint.selectionDrag then
+        paint:finishSelection(state,view,preferences,scale,W,H,rx,ry)
+        notice(paint.status)
+    end
     if color_swatch_drag and panel=="color" and colors.palette_mode then
         local d=color_swatch_drag
         local xx,yy=rx/scale,ry/scale
@@ -2448,6 +2496,11 @@ function love.keypressed(key)
         notice(paint.status)
         return
     end
+    if key=="escape" and paint.selectionDrag then
+        paint.selectionDrag=nil
+        notice("Seleção cancelada")
+        return
+    end
     if paint:key(state,key) then notice(paint.status);return end
     if state.screen=="editor" and panel=="color" and color_dialog then
         if key=="escape" then color_dialog=nil
@@ -2535,6 +2588,12 @@ function love.keypressed(key)
         end
     end
     if key=="escape" then
+        if state.screen=="editor" and not panel and paint.doc
+            and paint.doc.selection then
+            paint:clearSelection()
+            notice(paint.status)
+            return
+        end
         view:end_pan()
         if layer_blend_open then layer_blend_open=false
         elseif panel then panel=nil;state.active_panel=nil

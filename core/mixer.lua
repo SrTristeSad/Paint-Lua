@@ -2,6 +2,7 @@
 -- Não é o reservatório de tinta úmida completo do PhotoCraft: a v0.8 apenas
 -- simula coleta de pigmento na camada ativa. A amostra antecede a escrita.
 local Doc = require('core.doc')
+local Selection = require('core.selection')
 local Mixer = {}
 local Mix = {}; Mix.__index=Mix
 local function finite(v) return type(v)=='number' and v==v and v>-math.huge and v<math.huge end
@@ -113,8 +114,7 @@ function Mixer.sampleWet(doc,layer,cx,cy,radius,selection)
   for y=y0-radius,y0+radius do
     for x=x0-radius,x0+radius do
       if x>=0 and y>=0 and x<doc.w and y<doc.h
-        and (not selection or (x>=selection.x and x<selection.x+selection.w
-          and y>=selection.y and y<selection.y+selection.h)) then
+        and (not selection or Selection.contains(selection,x,y)) then
         count=count+1
         local tile=Doc.getTile(layer,math.floor(x/Doc.TILE),math.floor(y/Doc.TILE),false)
         if tile then

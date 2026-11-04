@@ -1,53 +1,57 @@
-name: Testes Paint-Lua unificado
+name: Paint-Lua v0.23 — testes e pacote Windows
 on:
   push:
-    branches: [main, integrate/ibis-unified, feature/paint-v022-tools]
+    branches: [main, feature/paint-v023-selection]
   pull_request:
 jobs:
   checks:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Instalar Lua e LÖVE
+      - name: Preparar Lua e LÖVE
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y lua5.4 love xvfb
-      - name: Conferir codigo inteiramente local
+      - name: Inspecionar arquivos e sintaxe Lua
         shell: bash
         run: |
           test -f core/doc.lua
-          test -f src/model.lua
+          test -f core/selection.lua
+          test -f tests/test_core.lua
           test -f assets/icons/png/paintbrush.png
           test ! -f .gitmodules
           while IFS= read -r f; do luac5.4 -p "$f"; done < <(find core app src tests -name '*.lua' -type f | sort)
-      - name: Smoke do nucleo e ponte
+      - name: Bateria completa do núcleo e integração (mocks)
+        run: |
+          lua5.4 tests/test_core.lua > core-results.log
+          tail -n 5 core-results.log
+          grep -Eq '870 passou, 0 falhou' core-results.log
+      - name: Testes do modelo e navegação
         run: |
           lua5.4 scripts/smoke-core.lua
           lua5.4 tests/test_bridge_smoke.lua
-      - name: Testes do modelo
-        run: |
           lua5.4 tests/test_model.lua
           lua5.4 tests/test_canvas_presets.lua
           lua5.4 tests/test_viewport.lua
           lua5.4 tests/test_layer_properties.lua
-      - name: Iniciar interface LÖVE real
-        run: timeout 45s xvfb-run -a env PAINT_LUA_SMOKE=1 PAINT_LUA_SCREEN=editor love .
-      - name: Pintura real, undo/redo e NPNT
-        run: timeout 45s xvfb-run -a env PAINT_LUA_BRIDGE_E2E=1 love .
-
-      - name: Montar pacote completo Windows
+          lua5.4 tests/test_gallery.lua
+          lua5.4 tests/test_color_state.lua
+      - name: Inicializar interface no LÖVE 11.5
+        run: timeout 60s xvfb-run -a env PAINT_LUA_SMOKE=1 PAINT_LUA_SCREEN=editor love .
+      - name: Testar pixels, seleção, undo/redo e NPNT1–NPNT5 no LÖVE
+        run: timeout 60s xvfb-run -a env PAINT_LUA_BRIDGE_E2E=1 love .
+      - name: Empacotar fontes e .bat para Windows
         shell: bash
         run: |
-          set -euo pipefail
-          git archive --format=zip --output=Paint-Lua-v0.22-Windows.zip HEAD
-          unzip -tq Paint-Lua-v0.22-Windows.zip
-          unzip -Z1 Paint-Lua-v0.22-Windows.zip | grep -q '^core/brush.lua$'
-          unzip -Z1 Paint-Lua-v0.22-Windows.zip | grep -q '^src/model.lua$'
-          unzip -Z1 Paint-Lua-v0.22-Windows.zip | grep -q '^testar.bat$'
-          sha256sum Paint-Lua-v0.22-Windows.zip
-      - name: Disponibilizar ZIP Windows
+          git archive --format=zip --output=Paint-Lua-v0.23-Windows.zip HEAD
+          unzip -tq Paint-Lua-v0.23-Windows.zip
+          unzip -Z1 Paint-Lua-v0.23-Windows.zip | grep -q '^core/selection.lua$'
+          unzip -Z1 Paint-Lua-v0.23-Windows.zip | grep -q '^tests/test_core.lua$'
+          unzip -Z1 Paint-Lua-v0.23-Windows.zip | grep -q '^testar.bat$'
+          sha256sum Paint-Lua-v0.23-Windows.zip
+      - name: Disponibilizar ZIP
         uses: actions/upload-artifact@v4
         with:
-          name: Paint-Lua-v0.22-Windows
-          path: Paint-Lua-v0.22-Windows.zip
+          name: Paint-Lua-v0.23-Windows
+          path: Paint-Lua-v0.23-Windows.zip
           if-no-files-found: error

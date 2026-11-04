@@ -12,7 +12,7 @@ Clone alternativo: git clone https://github.com/SrTristeSad/Paint-Lua.git (sem -
 
 ## Organização
 
-- **core/**: os 20 módulos Lua editáveis do núcleo v0.21, com pincéis, tiles, composição, histórico, máscaras, grupos e NPNT1–NPNT4.
+- **core/**: os 21 módulos Lua editáveis do núcleo (base v0.21 + seleção v0.23), com pincéis, tiles, histórico, máscaras, grupos e leitura NPNT1–NPNT5.
 - **src/**: estados da interface Ibis-Lua, galeria, pincéis, cores, layout e preferências.
 - **assets/icons/png/** e **assets/icons/svg/**: ícones Lucide, PNGs para LÖVE e fontes SVG editáveis. Licença em assets/icons/LICENSE-LUCIDE.txt.
 - **app/ibis_main.lua**: interface Ibis-Lua adaptada para renderizar os pixels reais.
@@ -24,7 +24,13 @@ Clone alternativo: git clone https://github.com/SrTristeSad/Paint-Lua.git (sem -
 
 A UI disponibiliza tela inicial, galeria, New Canvas, ferramentas, janelas de pincel, cores e camadas. O motor é responsável por pixels reais: **pintura, borracha, balde cooperativo, conta-gotas, Alpha Lock durante a sessão, camadas, recorte, desfazer/refazer e salvar/reabrir .npnt**. Zoom, rotação e pan usam a UI. Vários controles de filtros, transformações, máscaras, grupos e galeria **ainda são demonstrativos ou parcialmente integrados**. Não se deve assumir que um botão que existe na interface altera pixels.
 
-A base v0.21 registrou 777 testes históricos com mocks. A integração v0.22 incorporou testes novos de Alpha Lock e sincronização de camadas; o pacote de desenvolvimento local passou em **806 verificações simuladas** (a bateria completa antiga ainda não está versionada neste repositório). A integração básica passou em **LÖVE 11.5 real em Linux sob display virtual**, incluindo pincel, undo/redo e NPNT. Ainda são necessários testes manuais no Windows, desempenho e uso de caneta/tablet.
+A bateria do núcleo foi incorporada ao repositório na v0.23: **870 testes aprovados em texlua com mocks**, incluindo seleção, laço e NPNT5. A integração do editor também é verificada em LÖVE 11.5 real em Linux com display virtual. A integração básica passou em **LÖVE 11.5 real em Linux sob display virtual**, incluindo pincel, undo/redo e NPNT. Ainda são necessários testes manuais no Windows, desempenho e uso de caneta/tablet.
+
+## Seleção na v0.23
+
+No painel superior **Selection Area** há seleção por **retângulo**, **laço** e **varinha mágica**, além de Selecionar tudo e Desmarcar. O laço e a varinha também aparecem na barra de ferramentas. O desenho e o balde respeitam a área selecionada; desfazer/refazer restaura seleções anteriores. **Ctrl+A** seleciona tudo, **Ctrl+D** desmarca, **Esc** cancela a seleção em andamento ou a remove.
+
+O **NPNT5** preserva o laço e a máscara da varinha ao salvar e abrir; projetos antigos (NPNT1–NPNT4) continuam legíveis. A varinha opera por cor RGBA da **camada ativa** com um limite de segurança de 2 milhões de pixels, em execução cooperativa. A seleção não possui feather nem antialiasing ainda. [Comportamento detalhado e limites](docs/SELECAO_v023.md).
 
 ## Novidades da integração v0.22
 

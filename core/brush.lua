@@ -38,6 +38,7 @@ local Tip = require("core.tip")
 local Texture = require("core.texture")
 local Mixer = require("core.mixer")
 local Mask = require("core.mask")
+local Selection = require("core.selection")
 
 local T = Doc.TILE
 local B = {}
@@ -218,7 +219,8 @@ local function dabLua(doc, layer, h, cx, cy, o)
           local dx, dy = px + 0.5 - cx, py + 0.5 - cy
           local f = coverage(dx, dy)
           if paper then f = Texture.paperCoverage(paper,f,px,py) end
-          if f > 0 and (not o.alphaLock or
+          if f > 0 and (not o.selection or Selection.contains(o.selection,px,py))
+            and (not o.alphaLock or
             (existing and select(4,existing:getPixel(px-ox,py-oy)) > 0)) then
             if not tile then
               Hist.touch(h,layer,key)
@@ -326,7 +328,7 @@ local function dabMask(doc, layer, h, cx, cy, o)
           local strength = coverage(dx, dy)
           if paper then strength = Texture.paperCoverage(paper, strength, px, py) end
           local sa = strength * flow * o.alpha
-          if sa > 0 then
+          if sa > 0 and (not o.selection or Selection.contains(o.selection,px,py)) then
             local lx, ly = px - ox, py - oy
             local old = tile and select(1, tile:getPixel(lx, ly)) or mask.default
             local base = old
@@ -410,7 +412,7 @@ local function dabFFI(doc, layer, h, cx, cy, o)
           local dx, dy = px + 0.5 - cx, py + 0.5 - cy
           local f = coverage(dx, dy)
           if paper then f = Texture.paperCoverage(paper,f,px,py) end
-          if f > 0 then
+          if f > 0 and (not o.selection or Selection.contains(o.selection,px,py)) then
             if not tile then
               Hist.touch(h,layer,key)
               tile=Doc.getTile(layer,tx,ty,true)

@@ -68,7 +68,7 @@ function Doc.new(w, h, name)
     groups = {},       -- id -> {id, parentId, name, visible, opacity, blend, mask}
     nextGroupId = 1,
     sel = 2,
-    selection = nil,   -- {x, y, w, h} em coordenadas do documento, ou nil
+    selection = nil,   -- rect {x,y,w,h}; polígono ou varinha (core.selection), ou nil
     tool = "brush",
     size = 8,
     opacity = 100,

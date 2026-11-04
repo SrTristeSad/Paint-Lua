@@ -88,3 +88,73 @@ bridge:sync(model)
 assert(nextDoc.layers[2].clipped,"Clipping nao foi transferido da UI ao motor")
 print("PASS: LÖVE real v0.22: balde, conta-gotas, Alpha Lock e Clipping")
 print("PASS: Ibis-Lua + motor real do LOVE: pincel, undo, redo, NPNT")
+
+-- v0.23: seleção real nas coordenadas da UI e persistência NPNT5.
+local Selection=require('core.selection')
+local fresh=Model.new()
+fresh:open_gallery()
+fresh:open_new_canvas()
+fresh:create_canvas(64,64)
+local selectionBridge=Bridge.new()
+local selDoc=assert(selectionBridge:sync(fresh))
+local canvasScale=math.min((1024-left-right)/64,(768-160)/64,1.1)
+local function pos(x,y)
+  return cx+(x-32)*canvasScale,cy+(y-32)*canvasScale
+end
+fresh:set_tool('selection_rect')
+local x1,y1=pos(25,25)
+local x2,y2=pos(39,39)
+assert(selectionBridge:beginSelection(fresh,view,preferences,1,1024,768,x1,y1),
+  'início retangular não funcionou')
+selectionBridge:moveSelection(fresh,view,preferences,1,1024,768,x2,y2)
+assert(selectionBridge:finishSelection(fresh,view,preferences,1,1024,768,x2,y2),
+  'fim retangular não funcionou')
+assert(Selection.contains(selDoc.selection,32,32) and not Selection.contains(selDoc.selection,20,20),
+  'retângulo não delimitou os pixels')
+fresh:set_tool('brush')
+fresh:set_color(230,20,40)
+fresh:set_brush_size(18)
+assert(selectionBridge:press(fresh,view,preferences,1,1024,768,cx,cy,100))
+selectionBridge:finish(false)
+local cTile=assert(selDoc.layers[1].tiles['0,0'])
+assert(select(4,cTile:getPixel(32,32))>0,'pincel não escreveu dentro da seleção')
+assert(select(4,cTile:getPixel(20,20))==0,'pincel ultrapassou seleção retangular')
+
+fresh:set_tool('lasso')
+local ax,ay=pos(22,22)
+assert(selectionBridge:beginSelection(fresh,view,preferences,1,1024,768,ax,ay))
+local bx,by=pos(43,22)
+selectionBridge:moveSelection(fresh,view,preferences,1,1024,768,bx,by)
+bx,by=pos(22,43)
+selectionBridge:moveSelection(fresh,view,preferences,1,1024,768,bx,by)
+assert(selectionBridge:finishSelection(fresh,view,preferences,1,1024,768,bx,by))
+assert(selDoc.selection.kind=='polygon' and not Selection.contains(selDoc.selection,40,40),
+  'laço não criou seleção poligonal exata')
+selectionBridge.filename='ci-paint-lua-v023.npnt'
+local ok23,err23=selectionBridge:save()
+assert(ok23,'não salvou NPNT5: '..tostring(err23))
+assert(selectionBridge:load(fresh),'não carregou NPNT5 com laço: '..selectionBridge.status)
+assert(selectionBridge.doc.selection.kind=='polygon','NPNT5 não manteve laço')
+assert(not Selection.contains(selectionBridge.doc.selection,40,40),
+  'NPNT5 alterou forma do laço')
+
+fresh:set_tool('magic_wand')
+assert(selectionBridge:beginSelection(fresh,view,preferences,1,1024,768,cx,cy),
+  'varinha não iniciou')
+local count23=0
+while selectionBridge.job and count23<300 do
+  selectionBridge:update();count23=count23+1
+end
+assert(selectionBridge.job==nil and count23<300,'varinha não concluiu')
+assert(selectionBridge.doc.selection.kind=='wand','varinha não retornou máscara raster')
+assert(Selection.contains(selectionBridge.doc.selection,32,32),
+  'varinha não selecionou pixel da camada')
+assert(not Selection.contains(selectionBridge.doc.selection,20,20),
+  'varinha selecionou transparência adjacente')
+assert(selectionBridge:save(),'NPNT5 não salvou varinha')
+assert(selectionBridge:load(fresh),'NPNT5 não reabriu varinha')
+assert(selectionBridge.doc.selection.kind=='wand' and
+  Selection.contains(selectionBridge.doc.selection,32,32),
+  'máscara da varinha não persistiu no NPNT5')
+love.filesystem.remove(selectionBridge.filename)
+print('PASS: LÖVE real v0.23: retângulo, laço, varinha e NPNT5')
