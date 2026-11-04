@@ -541,7 +541,8 @@ assert(pcall(handlesBridge.drawSelection,handlesBridge,0,0,zoomHandles),
 assert(handlesBridge:applyTransform(HandlesModel),'aplicar alças falhou')
 assert(#handlesDoc.history.undo==1,'alças criaram entradas adicionais no histórico')
 assert(handlesBridge:historyStep(HandlesModel,false),'undo das alças falhou')
-assert(select(4,handlesTile:getPixel(44,44))==1,'undo não restaurou origem')
+assert(select(4,assert(handlesDoc.layers[1].tiles['0,0']):getPixel(44,44))==1,
+  'undo não restaurou origem')
 assert(handlesBridge:historyStep(HandlesModel,true),'redo das alças falhou')
 handlesBridge.filename='ci-paint-lua-v034.npnt'
 assert(handlesBridge:save(),'não salvou seleção transformada por mouse')
