@@ -1854,6 +1854,7 @@ require('tests.test_selection_v023')(check)
 require('tests.test_transform_v024')(check)
 require('tests.test_groups_ui_v025')(check)
 require('tests.test_thumbnail_reorder_v026')(check)
+require('tests.test_gallery_preview_v028')(check)
 
 print(string.format("\n%d passou, %d falhou", passed, failed))
 if failed > 0 then os.exit(1) end

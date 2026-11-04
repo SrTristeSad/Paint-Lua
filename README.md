@@ -1,4 +1,4 @@
-# Paint-Lua — Projeto único (v0.27)
+# Paint-Lua — Projeto único (v0.28)
 
 Editor experimental de pintura digital em Lua / LÖVE 11.5. A interface de Ibis-Lua e o núcleo de pintura v0.21 são **código-fonte do mesmo repositório**. Não há submódulos, download do Ibis-Lua na inicialização ou integração atual com DragonBones/Bono-Lua.
 
@@ -20,7 +20,7 @@ Clone alternativo: git clone https://github.com/SrTristeSad/Paint-Lua.git (sem -
 - **main.lua**, **conf.lua**, **testar.bat**: inicialização.
 - **tests/**, **tools/**, **docs/**: testes e documentação da interface e do núcleo.
 
-## Novidade v0.27 — galeria de múltiplas obras
+## Novidade v0.28 — galeria de múltiplas obras
 
 A **My Gallery** agora persiste obras diferentes em arquivos NPNT separados, com pastas, títulos e movimentação de itens preservados após reiniciar o programa. O editor **salva automaticamente ao voltar à galeria e ao encerrar normalmente**, além de permitir `Ctrl+S`. Ele mostra erro e mantém a edição aberta quando o salvamento falha. Um arquivo ausente/corrompido não é substituído por um canvas em branco.
 
@@ -92,3 +92,13 @@ O **NPNT5** preserva o laço e a máscara da varinha ao salvar e abrir; projetos
 Os fontes da interface foram incorporados de https://github.com/SrTristeSad/Ibis-Lua (revisão fixada e atribuída em ORIGENS.md). Não é o aplicativo oficial ibisPaint. PhotoCraft é referência técnica; ibisPaint é referência funcional. Consulte LICENSE-PHOTOCRAFT-MIT.txt, ORIGENS.md e a licença dos ícones Lucide.
 
 Para continuar em outro chat: PROMPT_DO_PROJETO.md e AGENTS.md.
+
+
+## Novidades v0.28 — prévias reais da galeria e PNG
+
+- **Miniaturas reais:** a galeria desenha o resultado composto das camadas, incluindo opacidade, visibilidade, grupos, clipping e máscaras. Cada obra tem um arquivo derivado `gallery/thumbs/<id>.png` de 160 × 160 px. A versão original da obra continua em `gallery/works/<id>.npnt`.
+- **Regeneração:** novas prévias são criadas depois de salvar a obra. A galeria pode reconstruir as de obras antigas a partir do `.npnt`; processa somente uma por quadro e mantém até 40 imagens carregadas.
+- **Exportar PNG:** no editor, use **Back → Exportar PNG**. Na galeria, selecione **uma obra** pelo modo Selecionar e pressione o ícone de download na barra superior. A imagem resultante preserva a transparência e a composição do documento, sem alterar o `.npnt`.
+- **Onde encontrar:** os PNGs aparecem na pasta de dados do LÖVE: `exports/obra-<id>.png` (Windows, geralmente `%APPDATA%\LOVE\paint-lua\exports`). Exportações posteriores recebem sufixos `-2`, `-3` etc.; nenhuma substitui uma exportação anterior.
+- **Segurança e limites:** PNG de resolução total limitado a **4.194.304 pixels** e lado máximo de 8.192 px, evitando alocação excessiva. Arquivos `.npnt` maiores podem continuar sendo abertos e editados; somente a exportação integral é recusada. A prévia mantém o tamanho máximo de 160 × 160 px. Não há sincronização em nuvem nem exportação JPEG/PSD nesta versão.
+- **Qualidade:** os testes puros do núcleo somam 1.029 verificações aprovadas. Teste de inicialização, persistência de miniaturas e exportação no LÖVE real acontece pela CI; teste manual no Windows ainda é necessário.

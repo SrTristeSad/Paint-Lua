@@ -13,6 +13,7 @@ local Layers = require('core.layers')
 local Groups = require('core.groups')
 local Thumbnail = require('core.thumbnail')
 local GalleryStorage = require('src.gallery_storage')
+local PNGExport=require('src.png_export')
 
 local Bridge = {}
 Bridge.__index = Bridge
@@ -845,8 +846,28 @@ function Bridge:save()
   else
     ok,err=Project.save(self.doc,self.filename)
   end
-  self.status=ok and ('Salvo: '..self.filename) or ('Erro: '..tostring(err))
+  if ok and self.artworkId then
+    -- A obra NPNT já está protegida; falha de miniatura não desfaz o salvamento.
+    local previewOK,previewErr=GalleryStorage.saveThumbnail(self.doc,self.artworkId)
+    self.status=previewOK and ('Salvo: '..self.filename) or
+      ('Obra salva; miniatura pendente: '..tostring(previewErr))
+  else
+    self.status=ok and ('Salvo: '..self.filename) or ('Erro: '..tostring(err))
+  end
   return ok,err
+end
+
+-- A exportação nunca modifica a pintura nem substitui um PNG existente.
+function Bridge:exportPNG(model)
+  if not self.doc then return nil,'nenhum documento aberto' end
+  if self.transform or self.job or self.selectionDrag then
+    return nil,'conclua ou cancele a operação antes de exportar'
+  end
+  self:finish(false)
+  if model then self:sync(model) end
+  local path,err=PNGExport.save(self.doc,self.artworkId or 'atual')
+  self.status=path and ('PNG exportado em '..path) or ('Exportação: '..tostring(err))
+  return path,err
 end
 
 function Bridge:load(model)

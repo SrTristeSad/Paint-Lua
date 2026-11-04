@@ -37,3 +37,7 @@ Miniaturas reais de camadas/máscaras com cache de revisões (`core/thumbnail.lu
 ## v0.27 — Persistência da My Gallery
 
 A decisão de prioridade foi implementar **salvamento de múltiplas obras sem nuvem e sem repositórios extras**. O módulo `src/gallery_storage.lua` grava dois catálogos alternados e um NPNT por ID de obra em `gallery/works/`. `app/ibis_main.lua` contém autosave ao sair do editor, na criação e no encerramento; `app/paint_bridge.lua` mantém o vínculo entre ID e documento. A migração do antigo `meu-desenho.npnt` nunca o apaga. Leia `docs/GALERIA_PERSISTENTE_v027.md` e os testes correspondentes antes de mudar persistência; evitar destruir desenhos, sobrescrever IDs ou abrir uma tela vazia no lugar de uma obra ausente.
+
+
+### Atualização v0.28
+A galeria agora usa miniaturas PNG derivadas dos arquivos `.npnt` e exporta composição PNG sem destruir as obras. `src/artwork_preview.lua` gera prévias por tiles sem alocar canvas inteiro; `src/png_export.lua` gera PNG até 4.194.304 pixels; `src/gallery_storage.lua` gerencia cache persistente por ID; `app/ibis_main.lua` oferece comandos de UI. Testes em `tests/test_gallery_preview_v028.lua`, `tests/test_core.lua`, e na CI de persistência da galeria. Não afirmar que suporta JPEG/PSD ou que o desempenho no Windows foi medido.

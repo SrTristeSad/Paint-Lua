@@ -24,3 +24,7 @@ Miniaturas reais de camadas/máscaras com cache de revisões (`core/thumbnail.lu
 
 - **v0.27:** a galeria persiste no save-directory do LÖVE; um NPNT por ID e dois índices alternados. Nunca gere nome de arquivo a partir do nome de uma obra. O backup `.bak` e a migração de `meu-desenho.npnt` não devem ser descartados.
 - Rode `tests/test_gallery_storage.lua` e o teste E2E em duas execuções LÖVE ao modificar catalogação e salvamento.
+
+
+### Atualização v0.28
+A galeria agora usa miniaturas PNG derivadas dos arquivos `.npnt` e exporta composição PNG sem destruir as obras. `src/artwork_preview.lua` gera prévias por tiles sem alocar canvas inteiro; `src/png_export.lua` gera PNG até 4.194.304 pixels; `src/gallery_storage.lua` gerencia cache persistente por ID; `app/ibis_main.lua` oferece comandos de UI. Testes em `tests/test_gallery_preview_v028.lua`, `tests/test_core.lua`, e na CI de persistência da galeria. Não afirmar que suporta JPEG/PSD ou que o desempenho no Windows foi medido.

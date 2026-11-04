@@ -9,6 +9,7 @@ local ViewState = require("src.view_state")
 local CanvasPresets = require("src.canvas_presets")
 local Gallery = require("src.gallery")
 local GalleryStorage = require("src.gallery_storage")
+local PNGExport = require("src.png_export")
 local BrushCatalog = require("src.brush_catalog")
 local EditorPreferences = require("src.editor_preferences")
 local ColorState = require("src.color_state")
@@ -44,6 +45,12 @@ local gallery_dialog=nil
 local gallery_input=""
 local gallery_input_replace=true
 local active_artwork_id=nil
+-- Cache LRU de prévias; geração de arquivos antigos ocorre de forma incremental.
+local gallery_thumb_cache={}
+local gallery_thumb_pending={}
+local gallery_thumb_queue={}
+local gallery_thumb_clock=0
+local MAX_GALLERY_IMAGES=40
 local controls = {}
 local font = {}
 local scale, W, H = 1, 1024, 768
@@ -161,6 +168,54 @@ local function persist_gallery()
     if not ok then notice('Galeria: falha ao salvar índice: '..tostring(err)) end
     return ok,err
 end
+local function forget_gallery_thumbnail(id)
+    local entry=gallery_thumb_cache[id]
+    if entry and entry.image and entry.image.release then entry.image:release() end
+    gallery_thumb_cache[id]=nil
+    gallery_thumb_pending[id]=nil
+end
+local function gallery_thumbnail(id)
+    if not persistence_enabled then return nil end
+    gallery_thumb_clock=gallery_thumb_clock+1
+    local cached=gallery_thumb_cache[id]
+    if cached then cached.t=gallery_thumb_clock;return cached.image end
+    if not gallery_thumb_pending[id] then
+        gallery_thumb_pending[id]=true
+        gallery_thumb_queue[#gallery_thumb_queue+1]=id
+    end
+    return nil
+end
+local function build_next_gallery_thumbnail()
+    if not persistence_enabled or state.screen~='gallery' then return end
+    while #gallery_thumb_queue>0 do
+        local id=table.remove(gallery_thumb_queue,1)
+        if gallery_thumb_pending[id] then
+            gallery_thumb_pending[id]=nil
+            local bytes=GalleryStorage.ensureThumbnail(id)
+            local image
+            if bytes then
+                local ok,result=pcall(function()
+                    return love.graphics.newImage(love.filesystem.newFileData(bytes,'preview.png'))
+                end)
+                if ok then image=result;image:setFilter('linear','linear') end
+            end
+            gallery_thumb_clock=gallery_thumb_clock+1
+            gallery_thumb_cache[id]={image=image,t=gallery_thumb_clock}
+            local n=0
+            local oldest,oldTime
+            for key,entry in pairs(gallery_thumb_cache) do
+                n=n+1
+                if not oldTime or entry.t<oldTime then
+                    oldest,oldTime=key,entry.t
+                end
+            end
+            if n>MAX_GALLERY_IMAGES and oldest~=id then
+                forget_gallery_thumbnail(oldest)
+            end
+            break -- No máximo uma composição/decodificação por quadro.
+        end
+    end
+end
 local function save_current_artwork()
     if not persistence_enabled or not active_artwork_id then return true end
     paint:sync(state)
@@ -169,6 +224,7 @@ local function save_current_artwork()
         notice('Falha ao salvar a obra: '..tostring(err))
         return nil,err
     end
+    forget_gallery_thumbnail(active_artwork_id)
     return persist_gallery()
 end
 local function back_to_gallery()
@@ -405,7 +461,25 @@ local function gallery_header()
         {"plus",function() gallery_menu=gallery_menu=="new" and nil or "new" end},
         {"settings",function() gallery_menu=gallery_menu=="cloud" and nil or "cloud" end},
         {"play",function() notice("Time-lapse indisponível sem o motor de obras.") end},
-        {"material",function() notice("Exportação exige processamento de imagem.") end},
+        {"down",function()
+            local picked,count=nil,0
+            for id,selected in pairs(gallery.selected) do
+                if selected then
+                    count=count+1
+                    local item=gallery:get(id)
+                    if item.type=='artwork' then picked=id end
+                end
+            end
+            if count~=1 or not picked then
+                notice('Selecione uma única obra para exportar PNG')
+                return
+            end
+            local doc,err=GalleryStorage.loadArtwork(picked)
+            if not doc then notice('Não foi possível abrir a obra: '..tostring(err));return end
+            local path,why=PNGExport.save(doc,picked)
+            if path then notice('PNG exportado em '..path)
+            else notice('PNG: '..tostring(why)) end
+        end},
         {"more",function() gallery_menu=gallery_menu=="more" and nil or "more" end}
     }
     local start=W-392
@@ -455,6 +529,16 @@ local function gallery_item(tile,item)
         local px,py=x+(w-cw)/2,y+27+(avail_h-ch)/2
         rectangle(px+2,py+4,cw,ch,C.deep,0.08,4)
         rectangle(px,py,cw,ch,C.white,1,4)
+        local artworkImage=gallery_thumbnail(item.id)
+        if artworkImage then
+            local size=math.min(avail_w,avail_h)
+            rgba(C.white)
+            love.graphics.draw(artworkImage,x+w/2-size/2,
+                y+27+avail_h/2-size/2,0,
+                size/artworkImage:getWidth(),size/artworkImage:getHeight())
+        else
+            label('Sem prévia',px+2,py+ch/2-6,cw-4,'tiny','center',C.muted)
+        end
         stroke(px,py,cw,ch,C.card_border,0.95)
         label(string.format("%d × %d",item.width,item.height),
             x+10,y+h-24,w-20,"tiny","center",C.muted)
@@ -674,7 +758,10 @@ local function finish_new_canvas(wi,he)
         paint:setArtwork(active_artwork_id)
         local ok,err=paint:save()
         if not ok then notice('Obra criada, mas não salva: '..tostring(err))
-        else persist_gallery() end
+        else
+            forget_gallery_thumbnail(active_artwork_id)
+            persist_gallery()
+        end
     end
     view:reset()
     panel=nil;gallery_menu=nil;focus=nil
@@ -2248,6 +2335,12 @@ function draw_editor_panel()
         plain_button(x+20,y+191,w-40,42,"Settings",function()
             set_panel("settings")
         end)
+        plain_button(x+20,y+250,w-40,42,"Exportar PNG",function()
+            local path,err=paint:exportPNG(state)
+            if path then
+                notice('PNG em '..love.filesystem.getSaveDirectory()..'/'..path)
+            else notice('PNG: '..tostring(err)) end
+        end,false,'editor_export_png')
         hit(x+20,y+191,w-40,42,function()
             set_panel("settings")
         end,"back_settings")
@@ -3360,7 +3453,10 @@ local function gallery_persist_update()
                 'catálogo não persistiu')
             local doc=assert(GalleryStorage.loadArtwork(2),'NPNT da obra ausente')
             assert(next(doc.layers[doc.sel].tiles),'pixel não salvo no NPNT')
-            print('PASS: galeria persistente E2E: criação, pintura e autosave')
+            local bytes=assert(GalleryStorage.thumbnailBytes(2),'prévia PNG ausente')
+            local png=love.image.newImageData(love.filesystem.newFileData(bytes,'preview.png'))
+            assert(png:getWidth()==160 and png:getHeight()==160,'prévia inválida')
+            print('PASS: galeria persistente E2E: pintura, autosave e miniatura')
             love.event.quit(0)
             return
         end
@@ -3373,10 +3469,15 @@ local function gallery_persist_update()
             click_control('artwork_2')
             assert(state.screen=='editor' and active_artwork_id==2,
                 'artwork não abriu depois de reiniciar')
-        else
+        elseif gallery_persist_stage==2 then
             local layer=paint.doc.layers[paint.doc.sel]
             assert(next(layer.tiles),'obra perdeu seus pixels após reinício')
-            print('PASS: galeria persistente E2E: abertura após reinício')
+            click_control('back')
+        elseif gallery_persist_stage==3 then
+            click_control('editor_export_png')
+            assert(love.filesystem.getInfo('exports/obra-2.png'),
+                'botão de exportação não produziu PNG')
+            print('PASS: galeria persistente E2E: reabertura e exportação PNG pelo botão')
             love.event.quit(0)
             return
         end
@@ -3385,6 +3486,7 @@ local function gallery_persist_update()
 end
 
 function love.update()
+    build_next_gallery_thumbnail()
     if gallery_persist_e2e and #controls>0 then
         gallery_persist_update()
         return

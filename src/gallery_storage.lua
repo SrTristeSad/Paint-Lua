@@ -4,6 +4,7 @@
 -- gravacao for interrompida. Obras usam nomes baseados SOMENTE em IDs.
 local Gallery=require('src.gallery')
 local Project=require('core.project')
+local Preview=require('src.artwork_preview')
 local S={blocked=false}
 local HEADER='PLG1\n'
 local MAX_RECORDS=4096
@@ -214,6 +215,45 @@ function S.importLegacy(g)
   local indexed,indexErr=S.save(g)
   if not indexed then return nil,indexErr end
   return true,id
+end
+
+-- PNGs de prévia são derivados e podem ser reconstruídos a partir de .npnt.
+function S.thumbnailPath(id)
+  checkedId(id)
+  return string.format('gallery/thumbs/%d.png',id)
+end
+
+function S.thumbnailBytes(id)
+  local bytes=read(S.thumbnailPath(id))
+  if type(bytes)~='string' or #bytes<8 or
+    bytes:sub(1,8)~='\137PNG\r\n\26\n' then
+    return nil,'prévia não encontrada ou corrompida'
+  end
+  return bytes
+end
+
+function S.saveThumbnail(doc,id)
+  if S.blocked then return nil,'galeria protegida contra sobrescrita' end
+  checkedId(id)
+  local f=fs()
+  if not (f and f.createDirectory) then return nil,'filesystem indisponível' end
+  local ok,err,detail=pcall(f.createDirectory,'gallery/thumbs')
+  if not ok or not err then return nil,tostring(ok and detail or err) end
+  local generated,encoded=pcall(function()
+    return Preview.render(doc,160,160):encode('png'):getString()
+  end)
+  if not generated then return nil,'prévia: '..tostring(encoded) end
+  return write(S.thumbnailPath(id),encoded)
+end
+
+function S.ensureThumbnail(id)
+  local bytes=S.thumbnailBytes(id)
+  if bytes then return bytes end
+  local doc,err=S.loadArtwork(id)
+  if not doc then return nil,err end
+  local ok,why=S.saveThumbnail(doc,id)
+  if not ok then return nil,why end
+  return S.thumbnailBytes(id)
 end
 
 function S.artworkPath(id)

@@ -1,7 +1,7 @@
 @echo off
 setlocal EnableExtensions
 cd /d "%~dp0"
-title Paint-Lua Unificado - Ibis-Lua e motor v0.21
+title Paint-Lua Unificado - Ibis-Lua e motor v0.28
 set "LOVE_EXE="
 if defined LOVE11_EXE if exist "%LOVE11_EXE%" set "LOVE_EXE=%LOVE11_EXE%"
 if not defined LOVE_EXE if exist "%~dp0love.exe" set "LOVE_EXE=%~dp0love.exe"
