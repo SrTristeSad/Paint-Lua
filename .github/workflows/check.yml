@@ -13,7 +13,7 @@ jobs:
       - name: Instalar Lua
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y lua5.4 xz-utils
+          sudo apt-get install -y lua5.4 xz-utils love xvfb
       - name: Preparar motor
         run: sh scripts/prepare-core.sh
       - name: Verificar sintaxe
@@ -32,3 +32,8 @@ jobs:
           lua5.4 vendor/Ibis-Lua/tests/test_model.lua
           lua5.4 vendor/Ibis-Lua/tests/test_canvas_presets.lua
           lua5.4 vendor/Ibis-Lua/tests/test_viewport.lua
+
+      - name: Inicializar UI no LÖVE com display virtual
+        run: |
+          love --version || true
+          timeout 40s xvfb-run -a env PAINT_LUA_SMOKE=1 PAINT_LUA_SCREEN=editor love .
