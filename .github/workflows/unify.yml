@@ -1,0 +1,75 @@
+name: Integrar Ibis-Lua em um unico projeto
+on:
+  push:
+    branches: [integrate/ibis-unified]
+    paths: ['.github/workflows/unify.yml']
+permissions:
+  contents: write
+jobs:
+  integrate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: integrate/ibis-unified
+          fetch-depth: 0
+          submodules: false
+          persist-credentials: true
+      - name: Consultar Ibis-Lua na revisao escolhida
+        uses: actions/checkout@v4
+        with:
+          repository: SrTristeSad/Ibis-Lua
+          ref: c6570a8ec802d2f47de23a87903b43b9c84c3022
+          path: .ibis-import
+          persist-credentials: false
+      - name: Integrar arquivos e remover submodulo
+        run: bash scripts/unify.sh
+      - name: Instalar interpretador Lua e LÖVE
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y lua5.4 love xvfb
+      - name: Validar fontes e integracao
+        shell: bash
+        run: |
+          set -euo pipefail
+          luac5.4 -p main.lua
+          luac5.4 -p app/ibis_main.lua
+          luac5.4 -p app/paint_bridge.lua
+          lua5.4 scripts/smoke-core.lua
+          lua5.4 tests/test_bridge_smoke.lua
+          lua5.4 tests/test_model.lua
+          lua5.4 tests/test_canvas_presets.lua
+          lua5.4 tests/test_viewport.lua
+          lua5.4 tests/test_layer_properties.lua
+          lua5.4 tests/test_gallery.lua
+          lua5.4 tests/test_color_state.lua
+      - name: Validar tela e pixels com LÖVE 11.5 real
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 45s xvfb-run -a env PAINT_LUA_SMOKE=1 PAINT_LUA_SCREEN=editor love .
+          timeout 45s xvfb-run -a env PAINT_LUA_BRIDGE_E2E=1 love .
+      - name: Versionar integracao completa
+        shell: bash
+        run: |
+          set -euo pipefail
+          git commit -m "feat: integrar Ibis-Lua e nucleo Paint-Lua num unico repositorio"
+          git push origin HEAD:refs/heads/integrate/ibis-unified
+      - name: Criar ZIP offline para Windows
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          git archive --format=zip --output=out/Paint-Lua-Unificado-Windows.zip HEAD
+          unzip -tq out/Paint-Lua-Unificado-Windows.zip
+          unzip -Z1 out/Paint-Lua-Unificado-Windows.zip | grep -q '^core/doc.lua$'
+          unzip -Z1 out/Paint-Lua-Unificado-Windows.zip | grep -q '^src/model.lua$'
+          unzip -Z1 out/Paint-Lua-Unificado-Windows.zip | grep -q '^assets/icons/png/paintbrush.png$'
+          unzip -Z1 out/Paint-Lua-Unificado-Windows.zip | grep -q '^testar.bat$'
+          sha256sum out/Paint-Lua-Unificado-Windows.zip
+      - name: Disponibilizar ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: Paint-Lua-Unificado-Windows
+          path: out/Paint-Lua-Unificado-Windows.zip
+          if-no-files-found: error
