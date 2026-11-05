@@ -60,8 +60,7 @@ try {
     # Permitir dispensa SOMENTE para a incompatibilidade de OpenGL
     # confirmada pelo próprio runtime. Não transforma outros erros
     # ou timeouts em sucesso.
-    $noGPU=($errors -and $errors.Contains('Unable to create OpenGL window')
-        -and $errors.Contains('OpenGL 2.1') -and $errors.Contains('GDI Generic'))
+    $noGPU=($errors -and $errors.Contains('Unable to create OpenGL window') -and $errors.Contains('OpenGL 2.1') -and $errors.Contains('GDI Generic'))
     if ($AllowMissingGraphics -and $noGPU) {
         $reason='SKIP: GitHub Windows runner tem apenas OpenGL 1.1 GDI Generic; LÖVE 11.5 exige OpenGL 2.1'
         Write-Output "::warning title=Windows sem GPU compatível::$reason"

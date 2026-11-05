@@ -230,6 +230,15 @@ jobs:
               throw "Arquivo ausente no ZIP final: $path"
             }
           }
+          # Validar sintaxe do script extraído antes de tentar abrir janela.
+          $tokens = $null
+          $parseErrors = $null
+          $script = Join-Path (Get-Location) 'win-release/scripts/windows-love-e2e.ps1'
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            $script, [ref]$tokens, [ref]$parseErrors) | Out-Null
+          if ($parseErrors.Count -ne 0) {
+            throw "Script de teste Windows inválido: $($parseErrors[0])"
+          }
           Write-Output 'PASS: ZIP Windows extraído, LOVE 11.5 validado, testar.bat e falha controlada'
       - name: Inicialização real da interface no LÖVE 11.5 Windows
         shell: pwsh
