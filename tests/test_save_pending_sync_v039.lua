@@ -207,6 +207,14 @@ return function(check)
   -- selecionada e propriedades pendentes, sem depender do Ctrl+S.
   local galleryId=19735
   local thumbnail=GalleryStorage.saveThumbnail
+  local originalMkdir=fs.createDirectory
+  -- test_core usa um filesystem mínimo sem createDirectory. A galeria
+  -- precisa criá-la; simular somente a pasta de obras neste cenário.
+  fs.createDirectory=function(path)
+    if path=='gallery/works' then return true end
+    if originalMkdir then return originalMkdir(path) end
+    return nil,'pasta inesperada'
+  end
   GalleryStorage.saveThumbnail=function() return true end
   bridge:setArtwork(galleryId)
   model:rename_layer(secondId,'Galeria com mudanças')
@@ -224,5 +232,6 @@ return function(check)
   check('salvar sync: API sem modelo continua compatível',
     bridge:save() and written[bridge.filename]~=nil)
   GalleryStorage.saveThumbnail=thumbnail
+  fs.createDirectory=originalMkdir
   fs.write=originalWrite
 end
