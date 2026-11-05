@@ -216,3 +216,15 @@ A varinha não deve selecionar pixels parciais de um preenchimento
 que poderá sofrer rollback. Após cancelar o job, esses gestos e
 undo/redo devem voltar a funcionar. Testes:
 `tests/test_selection_lifecycle_v039.lua` (23 verificações).
+
+### Isolamento de documentos e cache de seleção (v0.39)
+
+`Bridge:attachDocument` deve recriar `uiByLayer={}` antes de
+`refreshModel`; a tabela tem chaves fortes e poderia reter todos
+os tiles `ImageData` de pinturas previamente abertas. Alinhar a
+troca ao `Bridge:sync(fresh)`, reiniciando `selectionMode='replace'`.
+`Bridge:dropImages` deve soltar também `selectionOutline=nil`;
+o cálculo de contornos retém máscara e tiles do documento anterior.
+`tests/test_document_switch_v039.lua` valida caches, cancelamento
+de balde com rollback, um arquivo NPNT reaberto, início da seleção,
+undo/redo e criação de tela seguinte. Não alterar o projeto salvo.

@@ -369,3 +369,13 @@ varinha, para evitar leitura de pixels provisórios.
 
 Os testes de ciclo de vida ficam em
 `tests/test_selection_lifecycle_v039.lua`.
+
+### Trocar de obra sem reter o documento anterior
+
+Ao abrir uma pintura existente ou criar outra tela, o editor descarta
+as referências de camadas, o contorno incremental e os caches da obra
+anterior. A primeira seleção de uma obra aberta pela galeria começa
+em **Substituir**, sem herdar acidentalmente o modo Subtrair/Interseção
+da pintura anterior. Um preenchimento ainda ativo é cancelado com
+rollback antes da troca. Regressões em
+`tests/test_document_switch_v039.lua`.

@@ -66,6 +66,9 @@ function Bridge:dropImages()
     end
   end
   self.thumbCache=setmetatable({}, {__mode='k'})
+  -- O contorno incremental retém a seleção e os tiles do documento anterior.
+  -- O cache deve morrer também quando a nova obra começa sem seleção.
+  self.selectionOutline=nil
   if self.cache then self.cache:clear() end
   self.cache=nil
 end
@@ -1037,6 +1040,12 @@ function Bridge:attachDocument(model,doc,id)
   self.maskMode,self.maskOwner=nil,nil
   self:dropImages()
   self.doc=doc
+  -- attachDocument e sync(fresh) devem ter a mesma política de troca de obra:
+  -- nenhum mapa de camadas antigo nem modo de seleção pendente é herdado.
+  -- uiByLayer tem chaves fortes; preservá-lo reteria os pixels das obras antigas.
+  self.uiByLayer={}
+  self.selectionMode='replace'
+  self.jobSelectionMode=nil
   self.modelDocument={width=doc.w,height=doc.h}
   model.document=self.modelDocument
   model.screen='editor'

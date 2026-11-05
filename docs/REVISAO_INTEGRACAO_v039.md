@@ -179,3 +179,26 @@ confirmado, lock externo antes e depois de pixels parciais, rollback
 do balde e reinício seguro da varinha e da seleção retangular. A
 mudança não modifica NPNT, os pixels do documento nem os formatos de
 preferências. Permanece no PR #6, com `main` intocada.
+
+## Liberação de memória ao trocar de obra (revisão v0.39)
+
+`Bridge:attachDocument`, utilizado ao abrir uma pintura existente da
+galeria, não limpava o mapa `uiByLayer` anterior. Como suas chaves são
+fortes, as referências a camadas e `ImageData` das pinturas anteriores
+podiam permanecer vivas após fechar a obra. `Bridge:dropImages`
+tampouco liberava `selectionOutline`: a seleção raster e o cálculo
+incremental de contorno permaneciam associados à obra antiga mesmo
+após a troca para uma tela sem seleção.
+
+A troca de documento agora limpa o cache de contornos junto aos demais
+caches de imagem; `attachDocument` recria `uiByLayer`, reinicia
+`selectionMode='replace'` e descarta o modo de job anterior, alinhando
+a abertura pela galeria ao comportamento já usado por `sync(fresh)`.
+Nenhum pixel ou histórico é transportado entre documentos. Um balde
+ainda ativo na obra anterior é cancelado com rollback antes da troca.
+
+`tests/test_document_switch_v039.lua` cobre abertura de arquivo NPNT
+real, cancelamento de preenchimento cooperativo parcial, isolamento de
+camadas e históricos, limpeza do cache incremental, modo de seleção
+reiniciado, primeiro gesto e undo/redo na nova obra, além de nova
+tela criada depois. Não há mudança no formato NPNT ou nos arquivos.
