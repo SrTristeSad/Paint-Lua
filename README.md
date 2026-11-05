@@ -420,3 +420,15 @@ seleção anterior e evita gerar uma ação de desfazer indesejada.
 A inversão e a combinação de seleções também evitam cálculos
 desnecessários enquanto um balde cooperativo estiver ativo.
 Regressões: `tests/test_selection_clear_during_drag_v039.lua`.
+
+### Confirmar PNG preserva edições pendentes das camadas
+
+Ao posicionar um PNG sobre a tela, mudanças de camada feitas no painel
+ficam pendentes até confirmar ou cancelar a prévia. **Confirmar a
+importação não descarta essas mudanças**: nomes, opacidade,
+visibilidade, modo de mesclagem, recorte e até uma nova camada são
+aplicados depois do PNG. Se a camada ativa não foi alterada, o PNG
+fica selecionado; se outra camada foi escolhida, a escolha é
+respeitada. O histórico mantém duas ações independentes, permitindo
+desfazer primeiro as edições do painel e depois a importação.
+Regressão: `tests/test_png_import_pending_commit_v039.lua`.

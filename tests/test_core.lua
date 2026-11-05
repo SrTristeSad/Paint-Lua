@@ -1875,6 +1875,7 @@ require('tests.test_layer_sync_during_jobs_v039')(check)
 require('tests.test_png_export_operation_lock_v039')(check)
 require('tests.test_pending_preview_sync_v039')(check)
 require('tests.test_selection_clear_during_drag_v039')(check)
+require('tests.test_png_import_pending_commit_v039')(check)
 
 print(string.format("\n%d passou, %d falhou", passed, failed))
 if failed > 0 then os.exit(1) end

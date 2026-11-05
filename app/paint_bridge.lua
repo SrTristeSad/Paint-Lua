@@ -1180,6 +1180,21 @@ function Bridge:applyPNGImport(model)
     self.status='Documento alterado durante a prévia'
     return false
   end
+  -- sync adia as alterações do painel durante a prévia. Guardá-las antes
+  -- de refreshModel, que reescreve as entradas da UI e descartaria nomes,
+  -- opacidade e até camadas adicionadas enquanto o PNG era posicionado.
+  -- As cópias são necessárias porque refreshModel reutiliza as tabelas.
+  local pendingLayers={}
+  for i,entry in ipairs(model.layers) do
+    local copy={}
+    for key,value in pairs(entry) do copy[key]=value end
+    pendingLayers[i]=copy
+  end
+  local requestedActive=model.active_layer_id
+  local originalActive
+  for id,existing in pairs(self.byId) do
+    if existing==doc.layers[doc.sel] then originalActive=id;break end
+  end
   local ok,layer,count=pcall(PNGImport.insert,doc,session.source,session.filename,session)
   if not ok or not layer then
     self.status='PNG: '..tostring(ok and count or layer)
@@ -1187,6 +1202,20 @@ function Bridge:applyPNGImport(model)
   end
   self:cancelPNGImport()
   self:refreshModel(model)
+  -- O PNG passa a ser a camada ativa por padrão. Se o usuário mudou
+  -- explicitamente a seleção no painel, respeitar esse pedido pendente.
+  local imported=self.uiByLayer[layer]
+  pendingLayers[#pendingLayers+1]=imported
+  model.layers=pendingLayers
+  if requestedActive and requestedActive~=originalActive then
+    model.active_layer_id=requestedActive
+  end
+  -- Registra as mudanças pendentes depois da importação, como operação
+  -- estrutural independente: undo primeiro desfaz o painel, depois o PNG.
+  if not self:sync(model) then
+    self.status='PNG aplicado; sincronização de camadas pendente'
+    return false
+  end
   self:dropImages()
   self.cache=Composite.newCache(doc,{maxTiles=96})
   self.status='PNG aplicado: '..tostring(count)..' pixels (Ctrl+Z desfaz)'

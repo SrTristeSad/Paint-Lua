@@ -277,3 +277,16 @@ recusar `invertSelection` e `combineSelection` logo no início
 quando `doc.history._fillLock` estiver ativo, antes de criar
 máscaras temporárias. Testes de regressão em
 `tests/test_selection_clear_during_drag_v039.lua` (27).
+
+### Confirmar importação PNG sem descartar edições da UI (v0.39)
+
+`Bridge:applyPNGImport` deve capturar uma cópia independente das
+entradas de `model.layers` **antes** de `refreshModel` (essa rotina
+reutiliza e reescreve tabelas). A inserção do PNG deve ocorrer antes
+de sincronizar alterações do painel, para que um PNG inválido não
+crie undo nem modifique camadas. Depois da inserção bem-sucedida,
+incorporar a nova camada ao modelo pendente e sincronizar as
+propriedades; manter o PNG ativo por padrão ou respeitar uma troca
+explícita da camada selecionada. A importação e as mudanças de
+camadas são ações distintas no histórico, sem snapshot extra se
+nada mudou. Testes em `tests/test_png_import_pending_commit_v039.lua`.

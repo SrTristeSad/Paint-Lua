@@ -303,3 +303,31 @@ na última etapa.
 painel e atalho Ctrl+D, gesto confirmado e cancelado, seleção
 ausente, bloqueio externo e recusa precoce da rasterização.
 Nenhum formato ou ferramenta foi alterado.
+
+## Confirmação de PNG com edições pendentes no painel (v0.39)
+
+A prévia de importação bloqueava corretamente a sincronização de nome,
+visibilidade, mesclagem, opacidade e seleção de camada enquanto a imagem
+era posicionada. Porém, confirmar o PNG chamava `refreshModel(model)`
+após inserir a nova camada: a rotina reescrevia as entradas da interface
+com as propriedades antigas do documento, apagando **alterações
+pendentes do painel** que o usuário havia feito durante a prévia. Uma
+camada adicionada apenas no modelo também desaparecia.
+
+`Bridge:applyPNGImport` agora copia as entradas pendentes antes da
+inserção, sem tocar no documento durante uma prévia que ainda pode
+falhar. Após `PNGImport.insert` confirmar a nova camada e registrar
+seu snapshot, a ponte reconstrói a interface, conserva a nova camada
+PNG e reaplica as alterações de camadas e ordem capturadas. Se não
+houve mudança explícita da camada ativa, a camada PNG segue selecionada;
+se o usuário escolheu outra camada durante a prévia, essa seleção é
+respeitada. A sincronização final registra alterações estruturais
+como **uma segunda ação**: Ctrl+Z desfaz primeiro as edições do painel
+e depois a importação, enquanto Ctrl+Y refaz na mesma ordem.
+
+A falha de importação preserva a prévia e deixa as edições no modelo
+para serem aplicadas depois do cancelamento. A ausência de mudanças
+pendentes não cria snapshot extra. `tests/test_png_import_pending_commit_v039.lua`
+contém **28 verificações** para cenários normais, propriedades,
+adição de camada, IDs estáveis, isolamento de undo/redo e erro de PNG
+totalmente transparente. Os formatos PNG e NPNT permanecem intactos.
