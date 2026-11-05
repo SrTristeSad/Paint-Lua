@@ -50,10 +50,8 @@ if not exist "assets\icons\png\paintbrush.png" (
   exit /b 8
 )
 if defined PAINT_LUA_VERIFY_ONLY (
-  echo [TESTE] Arquivos do editor encontrados. Verificando LOVE 11.5...
-  "%LOVE_EXE%" --version
-  if errorlevel 1 exit /b 9
-  echo [OK] Inicializador e runtime encontrados.
+  echo [TESTE] Verificando arquivos e caminho do executavel LOVE...
+  echo [OK] Inicializador e executavel LOVE encontrados.
   exit /b 0
 )
 "%LOVE_EXE%" "%CD%"

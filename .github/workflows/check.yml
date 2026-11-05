@@ -169,8 +169,13 @@ jobs:
             Select-Object -First 1
           if (-not $binary) { throw 'love.exe não encontrado no runtime oficial' }
           "LOVE11_EXE=$($binary.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
-          & $binary.FullName --version
-          if ($LASTEXITCODE -ne 0) { throw "love.exe --version falhou: $LASTEXITCODE" }
+          # love.exe usa o subsistema gráfico do Windows e não oferece
+          # exit code síncrono no PowerShell. Testar o irmão de console.
+          $console = Get-ChildItem $folder -Recurse -File -Filter lovec.exe |
+            Select-Object -First 1
+          if (-not $console) { throw 'lovec.exe ausente no runtime oficial' }
+          & $console.FullName --version
+          if ($LASTEXITCODE -ne 0) { throw "lovec.exe --version falhou: $LASTEXITCODE" }
       - name: Extrair pacote entregue e executar testar.bat no Windows
         shell: pwsh
         run: |
