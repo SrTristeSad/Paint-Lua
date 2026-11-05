@@ -389,3 +389,38 @@ A regressão `tests/test_selection_finish_race_v039.lua` contém
 preenchimento antes/depois de produzir pixels provisórios, rollback,
 histórico com redo pendente, laço em modo Adicionar com uma pincelada
 externa, job da ponte e o comportamento de um laço incompleto.
+
+## Pincelada interna e atualização pendente de camadas (v0.39)
+
+`Bridge:sync` já protegia o documento contra um balde externo,
+uma varinha e prévias visuais. Porém, a condição
+`doc.history.stroke and not self.stroke` **excluía a própria
+pincelada do editor**. Durante um traço ativo, opacidade e troca
+da camada selecionada eram aplicadas imediatamente; renomeação,
+visibilidade ou alteração estrutural podiam chamar
+`self:finish(false)` implicitamente e registrar snapshots sem
+a soltura do mouse.
+
+Agora toda alteração de camada é adiada quando `self.stroke`
+ou `doc.history.stroke` estiver ativo. A referência à camada
+original, os pixels provisórios e o histórico do pincel permanecem
+íntegros. Soltar confirma apenas o traço; a sincronização seguinte
+aplica as edições pendentes, registrando um snapshot separado
+quando houver mudança estrutural. Cancelar o traço restaura os
+pixels, sem criar histórico, e libera as mudanças leves.
+
+Havia ainda um efeito colateral anterior: `Bridge:toCanvas`
+retornava `nil` quando `sync` adiava uma mudança, interrompendo
+o movimento do pincel, do arraste de seleção e de prévias.
+Agora o gesto já ativo pode continuar convertendo coordenadas
+**somente** quando o modelo ainda referencia a mesma obra aberta
+no editor e não há `_fillLock` externo; nunca usa a geometria
+de outro documento. Isso não permite novas operações de edição,
+nem ignora as proteções de histórico.
+
+`tests/test_stroke_pending_layer_sync_v039.lua` acrescenta
+29 verificações usando `Stroke.new` real, pixels, commit e
+rollback, coordenadas de mouse, opacidade, troca/renomeação/
+visibilidade de camadas, undo/redo, arraste de seleção,
+prévia PNG e saída do editor. Formatos NPNT/PNG e ferramentas
+permanecem inalterados.

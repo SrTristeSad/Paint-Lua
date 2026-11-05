@@ -147,9 +147,10 @@ function Bridge:sync(model)
       self.status='Confirme ou cancele a prévia/seleção antes de alterar camadas'
       return nil
     end
-    -- Mesmo mudanças leves (opacidade e camada ativa) aguardam jobs
-    -- cooperativos e pinceladas externas com pixels provisórios.
-    if doc.history._fillLock or (doc.history.stroke and not self.stroke)
+    -- Também adiar alterações durante o traço da própria ponte.
+    -- Antes, opacidade/troca de camada atravessavam o gesto ativo e uma
+    -- alteração estrutural podia finalizá-lo sem o usuário soltar o mouse.
+    if self.stroke or doc.history._fillLock or doc.history.stroke
       or self.job then
       self.status='Conclua a operação antes de alterar camadas'
       return nil
@@ -446,7 +447,16 @@ end
 
 -- Coordenadas inversas da transformacao usada pelo editor Ibis-Lua.
 function Bridge:toCanvas(model,view,prefs,uiScale,W,H,rx,ry)
-  if not self:sync(model) then return nil end
+  if not self:sync(model) then
+    -- Alterações do painel podem ficar pendentes durante um gesto. Nesse
+    -- caso, continuar convertendo o cursor na geometria da obra original:
+    -- bloquear a sincronização não deve congelar o pincel, laço ou prévia.
+    -- Nunca usar o documento anterior se o modelo/tela já mudou.
+    if not (self.doc and self.modelDocument==model.document
+      and model.screen=='editor' and
+      (self.stroke or self.selectionDrag or self.transform or self.pngPreview)
+      and not self.doc.history._fillLock) then return nil end
+  end
   local left=prefs.tool_position=="left" and 62 or 0
   local right=prefs.tool_position=="right" and 75 or 34
   local aw,ah=W-left-right,H-160

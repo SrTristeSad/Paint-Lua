@@ -453,3 +453,15 @@ anterior até que o trabalho termine ou seja cancelado. Assim, é
 possível confirmar a seleção sem redesenhá-la e sem gerar ações
 duplicadas no histórico. Testes:
 `tests/test_selection_finish_race_v039.lua`.
+
+### Pinceladas e edições de camadas
+
+Enquanto um traço de pincel está aberto, mudanças de camada
+no painel ficam pendentes até soltar ou cancelar o gesto.
+O editor mantém a camada original e o movimento do cursor,
+sem encerrar a pincelada inesperadamente. Ao soltar,
+o histórico registra a pintura primeiro; depois aplica a
+renomeação/visibilidade como ação independente, quando necessário.
+O mesmo ajuste mantém o arraste de seleção e a prévia PNG
+responsivos enquanto propriedades do painel aguardam sincronização.
+Cobertura: `tests/test_stroke_pending_layer_sync_v039.lua`.

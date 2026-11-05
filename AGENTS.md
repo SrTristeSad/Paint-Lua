@@ -316,3 +316,18 @@ confirmação bem-sucedida pode criar snapshot. Retomar depois do
 desbloqueio sem criar snapshots extra. Sem lock, laço degenerado
 continua sendo descartado como anteriormente. Regressões:
 `tests/test_selection_finish_race_v039.lua` (31).
+
+### Pincelada própria e coordenadas durante sync pendente (v0.39)
+
+`Bridge:sync` deve adiar qualquer mudança de camada também
+enquanto `self.stroke` ou `doc.history.stroke` estiverem
+ativos. Não finalizar a pincelada implicitamente por mudança
+estrutural, nem aplicar opacidade/troca da camada ativa durante
+o gesto. Em `Bridge:toCanvas`, quando a sincronização foi
+recusada por mudanças pendentes, continuar usando coordenadas
+do documento original apenas para `self.stroke`,
+`self.selectionDrag`, `self.transform` ou `self.pngPreview`
+e somente se `model.screen=='editor'`, `model.document`
+for o mesmo objeto e não houver `_fillLock`. Operações
+novas continuam respeitando os guardas de `sync`.
+Regressão: `tests/test_stroke_pending_layer_sync_v039.lua` (29).
