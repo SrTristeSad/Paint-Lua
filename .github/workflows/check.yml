@@ -196,9 +196,13 @@ jobs:
             $script = Join-Path 'app' 'selection_ants.lua'
             Rename-Item -LiteralPath $script -NewName 'selection_ants.lua.hidden'
             try {
-              & cmd.exe /d /c "call testar.bat"
-              if ($LASTEXITCODE -ne 5) {
-                throw "testar.bat não detectou asset ausente: $LASTEXITCODE"
+              # Um exit 5 é o resultado esperado; usar Start-Process
+              # evita que pwsh com ErrorActionPreference=Stop o converta
+              # automaticamente em erro antes de examinarmos o código.
+              $failed = Start-Process -FilePath cmd.exe -Wait -PassThru -NoNewWindow `
+                -ArgumentList '/d /c "call testar.bat"'
+              if ($failed.ExitCode -ne 5) {
+                throw "testar.bat não detectou asset ausente: $($failed.ExitCode)"
               }
             } finally {
               Rename-Item -LiteralPath (Join-Path 'app' 'selection_ants.lua.hidden') -NewName 'selection_ants.lua'
