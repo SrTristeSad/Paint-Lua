@@ -424,3 +424,38 @@ rollback, coordenadas de mouse, opacidade, troca/renomeação/
 visibilidade de camadas, undo/redo, arraste de seleção,
 prévia PNG e saída do editor. Formatos NPNT/PNG e ferramentas
 permanecem inalterados.
+
+## Salvamento NPNT com alterações de camada pendentes (v0.39)
+
+O atalho `Ctrl+S` antes executava `Bridge:sync(model)` mas
+ignorava seu retorno; em seguida chamava `Bridge:save()`. Se
+a interface mantinha alterações pendentes durante uma pincelada,
+`sync` as adiava, mas `save` concluía o traço e gravava um
+arquivo NPNT **sem o nome, a opacidade ou a camada ativa novos**.
+O usuário recebia a confirmação de salvamento apesar das
+alterações não persistirem. O fluxo de voltar à galeria usava
+o mesmo padrão, com risco de sair do editor antes da gravação
+dessas propriedades.
+
+Agora `Bridge:save(model)` realiza a transação na ordem correta:
+recusa prévias, seleção e jobs pendentes; bloqueia explicitamente
+`doc.history._fillLock` e pinceladas externas antes de tocar no
+arquivo; confirma a pincelada que pertence à própria ponte,
+preservando o comportamento anterior; sincroniza o modelo atual
+**após** a confirmação; e só grava NPNT se a sincronização tiver
+concluído com sucesso. Também recusa um modelo de outra obra
+ou fora do editor, sem trocar acidentalmente o documento.
+Chamadas sem argumento `save()` permanecem compatíveis para
+APIs que já sincronizaram o documento.
+
+O atalho `Bridge:key('s')` e os salvamentos de criação/retorno
+da galeria agora passam o modelo à mesma API de salvamento,
+em vez de ignorar o resultado de uma sincronização separada.
+As mudanças estruturais pendentes são registradas como uma
+ação de histórico após a pincelada, preservando undo/redo.
+
+`tests/test_save_pending_sync_v039.lua` adiciona **33 verificações**
+com NPNT real decodificado, Ctrl+S e pincelada real, propriedades
+e camada ativa, histórico, balde externo antes/depois de pixels
+parciais, rollback, pincelada externa, prévias, modelo antigo,
+galeria e compatibilidade com `save()`.

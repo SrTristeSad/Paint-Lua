@@ -465,3 +465,14 @@ renomeação/visibilidade como ação independente, quando necessário.
 O mesmo ajuste mantém o arraste de seleção e a prévia PNG
 responsivos enquanto propriedades do painel aguardam sincronização.
 Cobertura: `tests/test_stroke_pending_layer_sync_v039.lua`.
+
+### Ctrl+S e alterações de camadas ainda pendentes
+
+O salvamento NPNT agora confirma a pincelada aberta, sincroniza
+as alterações de nome, opacidade e camada ativa do painel e
+somente então grava a obra. Assim, **Ctrl+S** e o salvamento ao
+retornar à galeria não informam sucesso enquanto essas
+propriedades ainda estiverem desatualizadas no arquivo.
+Preenchimentos externos ou pinceladas não confirmadas por
+outro componente continuam bloqueando o salvamento até
+concluir/cancelar. Regressões em `tests/test_save_pending_sync_v039.lua`.

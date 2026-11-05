@@ -245,8 +245,7 @@ local function build_next_gallery_thumbnail()
 end
 local function save_current_artwork()
     if not persistence_enabled or not active_artwork_id then return true end
-    paint:sync(state)
-    local ok,err=paint:save()
+    local ok,err=paint:save(state)
     if not ok then
         notice('Falha ao salvar a obra: '..tostring(err))
         return nil,err
@@ -810,7 +809,7 @@ local function finish_new_canvas(wi,he)
     if persistence_enabled then
         paint:sync(state)
         paint:setArtwork(active_artwork_id)
-        local ok,err=paint:save()
+        local ok,err=paint:save(state)
         if not ok then notice('Obra criada, mas não salva: '..tostring(err))
         else
             forget_gallery_thumbnail(active_artwork_id)

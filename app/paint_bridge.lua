@@ -1107,12 +1107,26 @@ function Bridge:attachDocument(model,doc,id)
   return true
 end
 
-function Bridge:save()
+function Bridge:save(model)
   if self.transform or self.pngPreview then return nil,'confirme ou cancele a prévia antes de salvar' end
   if not self.doc then return nil,'nenhum documento' end
+  if model and (model.screen~='editor' or model.document~=self.modelDocument) then
+    return nil,'documento alterado antes de salvar'
+  end
   if self.job then return nil,'operação em andamento' end
   if self.selectionDrag then return nil,'finalize a seleção antes de salvar' end
+  -- Jobs iniciados fora da ponte também podem manter pixels provisórios.
+  -- Recusar antes de finalizar o traço ou acessar o sistema de arquivos.
+  if self.doc.history._fillLock or
+    (self.doc.history.stroke and not self.stroke) then
+    return nil,'conclua ou cancele a operação antes de salvar'
+  end
+  -- A pincelada pertencente à ponte pode ser confirmada ao salvar, como
+  -- antes; só depois disso é seguro aplicar as edições pendentes do painel.
   self:finish(false)
+  if model and not self:sync(model) then
+    return nil,self.status or 'não foi possível sincronizar as camadas antes de salvar'
+  end
   local ok,err
   if self.artworkId then
     ok,err=GalleryStorage.saveArtwork(self.doc,self.artworkId)
@@ -1406,8 +1420,7 @@ function Bridge:key(model,key)
   if key=='a' then self:selectAll(model);return true end
   if key=='d' then self:clearSelection();return true end
   if key=='s' then
-    self:sync(model)
-    local ok,err=self:save()
+    local ok,err=self:save(model)
     if not ok then self.status=tostring(err) end
     return true
   end

@@ -331,3 +331,17 @@ e somente se `model.screen=='editor'`, `model.document`
 for o mesmo objeto e não houver `_fillLock`. Operações
 novas continuam respeitando os guardas de `sync`.
 Regressão: `tests/test_stroke_pending_layer_sync_v039.lua` (29).
+
+### Persistência NPNT exige sincronização confirmada (v0.39)
+
+`Bridge:save(model)` deve ser o ponto único de salvamento
+da interface: validar modelo da mesma obra, bloquear locks
+de preenchimento e pinceladas externas, finalizar apenas a
+pincelada pertencente à ponte, chamar `Bridge:sync(model)`
+e não escrever NPNT se `sync` retornar `nil`. Passar
+`state` nos chamadores de Ctrl+S, criação de obra e retorno
+à galeria; evitar chamar `paint:sync(state)` separadamente
+e ignorar falhas. `Bridge:save()` sem modelo permanece
+compatível para integrações já sincronizadas. Não gravar
+propriedades antigas se estiverem pendentes.
+Teste: `tests/test_save_pending_sync_v039.lua` (33).
