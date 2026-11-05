@@ -164,3 +164,13 @@ erro confirmada pelo motor. Demais falhas e timeouts continuam fatais.
 No Windows do usuário, o teste permanece estrito (sem essa flag).
 Não alegar renderização Windows confirmada antes dos modos passarem,
 nem confundir isso com teste de stylus/pressão.
+
+### Preservação do histórico durante gestos v0.39
+
+O PR #6 agora recusa Ctrl+Z/Ctrl+Y enquanto uma seleção está sendo
+arrastada, preservando o gesto e as pilhas de undo/redo; após concluir
+o arraste, o histórico volta a funcionar. Também recusa novos gestos
+de seleção (inclusive a varinha) durante um balde cooperativo externo
+ao controller, antes e durante pixels temporários. Depois de cancelar
+o balde, rollback e seleção retornam ao estado normal. Cobertura em
+`tests/test_selection_lifecycle_v039.lua` (23 testes).

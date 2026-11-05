@@ -156,3 +156,26 @@ A bateria `tests/test_selection_fill_lock_v039.lua` cobre essas rotas
 com um trabalho `Fill.newJob` autêntico, incluindo cancelamento,
 histórico, Ctrl+A, desmarcar, inversão, combinação e sincronização.
 Não há alteração do formato NPNT ou do comportamento de desenho.
+
+## Atalhos de histórico durante gestos (revisão v0.39)
+
+Foi detectada outra divergência: `Bridge:historyStep` apagava
+`selectionDrag` antes de aplicar Ctrl+Z/Ctrl+Y. Isso podia cancelar
+silenciosamente uma seleção em andamento e desfazer ou refazer uma
+ação anterior que o usuário não pretendia alterar. O histórico agora
+**recusa os atalhos durante o arraste**, mantém o objeto do gesto e
+orienta a concluí-lo ou cancelá-lo explicitamente.
+
+O histórico também verifica o lock transacional de um preenchimento
+iniciado fora do controlador (`doc.history._fillLock`) antes de
+sincronizar camadas. `Bridge:beginSelection` impede iniciar tanto
+retângulos/laços quanto a varinha mágica enquanto esse lock ou um
+traço do histórico estiver ativo: a varinha não pode selecionar com
+base em pixels provisórios que serão revertidos pelo balde.
+
+`tests/test_selection_lifecycle_v039.lua` acrescenta 23 testes:
+Ctrl+Z/Ctrl+Y com um arraste e pilhas reais de undo/redo, gesto
+confirmado, lock externo antes e depois de pixels parciais, rollback
+do balde e reinício seguro da varinha e da seleção retangular. A
+mudança não modifica NPNT, os pixels do documento nem os formatos de
+preferências. Permanece no PR #6, com `main` intocada.

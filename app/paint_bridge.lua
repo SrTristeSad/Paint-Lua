@@ -613,6 +613,12 @@ end
 function Bridge:beginSelection(model,view,prefs,uiScale,W,H,rx,ry)
   if self.stroke or self.job or self.transform or self.selectionDrag
     or self.pngPreview then return false end
+  -- A varinha lê pixels do documento. Não iniciar um trabalho de seleção
+  -- sobre pixels temporários de um balde externo à ponte.
+  if not self.doc or self.doc.history._fillLock or self.doc.history.stroke then
+    self.status='Finalize a pincelada ou preenchimento antes de selecionar'
+    return false
+  end
   local tool=model.active_tool
   if tool~='selection_rect' and tool~='lasso' and tool~='magic_wand' then
     return false
@@ -1264,10 +1270,21 @@ function Bridge:historyStep(model,redo)
     self.status='Finalize ou cancele o trabalho antes do histórico'
     return false
   end
+  -- Não cancelar silenciosamente um laço/retângulo ao pressionar
+  -- Ctrl+Z/Y. O gesto pendente não entrou no histórico ainda.
+  if self.selectionDrag then
+    self.status='Finalize ou cancele o arraste antes do histórico'
+    return false
+  end
+  -- Jobs externos à ponte também seguram o token de preenchimento.
+  if self.doc and (self.doc.history._fillLock or
+    (self.doc.history.stroke and not self.stroke)) then
+    self.status='Finalize o preenchimento antes do histórico'
+    return false
+  end
   self:finish(false)
-  self.selectionDrag=nil
-  self:sync(model)
-  if not self.doc then return false end
+  local doc=self:sync(model)
+  if not doc then return false end
   local fn=redo and History.redo or History.undo
   local ok,changed=pcall(fn,self.doc)
   self.status=not ok and tostring(changed) or

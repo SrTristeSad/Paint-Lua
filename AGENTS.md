@@ -201,3 +201,18 @@ sem lançar `History.recordStructure` bloqueado. Testes integrados
 em `tests/test_selection_fill_lock_v039.lua`: lock antes da primeira
 fatia, pixels parciais, cancelamento com rollback, aplicação de camada
 adiada e Ctrl+A/undo/redo após liberar. Preservar NPNT e `main`.
+
+### Histórico e seleção durante gestos (PR #6)
+
+`Bridge:historyStep` deve recusar Ctrl+Z/Ctrl+Y sem alterar a seleção,
+`selectionDrag` ou as pilhas de histórico enquanto existir um
+arraste, inclusive com histórico anterior pendente. Não cancelar
+silenciosamente o gesto. Recusar o histórico também quando o lock
+`doc.history._fillLock` pertencer a um job de balde externo.
+
+`Bridge:beginSelection` deve bloquear retângulo, laço e varinha
+mágica durante `doc.history._fillLock` ou `doc.history.stroke`.
+A varinha não deve selecionar pixels parciais de um preenchimento
+que poderá sofrer rollback. Após cancelar o job, esses gestos e
+undo/redo devem voltar a funcionar. Testes:
+`tests/test_selection_lifecycle_v039.lua` (23 verificações).

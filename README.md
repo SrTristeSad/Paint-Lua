@@ -358,3 +358,14 @@ Para continuar em outro chat: PROMPT_DO_PROJETO.md e AGENTS.md.
 **Correção adicional v0.33:** os botões de giro fino de PNG (−1°, +1°, Giro 0°)
 agora são aceitos mesmo enquanto a importação está em prévia; a proteção
 contra outras operações continua ativa.
+
+### Atalhos durante uma seleção
+
+Enquanto um retângulo ou laço está sendo arrastado, **Ctrl+Z / Ctrl+Y**
+não desfazem ações anteriores nem cancelam o gesto em silêncio.
+Confirme ou cancele a seleção primeiro. Um preenchimento cooperativo
+ainda em andamento também impede novos gestos de seleção e o uso da
+varinha, para evitar leitura de pixels provisórios.
+
+Os testes de ciclo de vida ficam em
+`tests/test_selection_lifecycle_v039.lua`.
