@@ -28,18 +28,24 @@ $stdout=Join-Path $env:RUNNER_TEMP ("paint-lua-$Mode.stdout.txt")
 $stderr=Join-Path $env:RUNNER_TEMP ("paint-lua-$Mode.stderr.txt")
 Remove-Item $stdout,$stderr -Force -ErrorAction SilentlyContinue
 Write-Output "LÖVE 11.5 no Windows: iniciando teste $Mode do pacote..."
+Write-Output "Windows: SESSIONNAME=$env:SESSIONNAME; USERINTERACTIVE=$([Environment]::UserInteractive)"
 $proc=Start-Process -FilePath $exe -ArgumentList '.' -WorkingDirectory $root `
     -PassThru -RedirectStandardOutput $stdout -RedirectStandardError $stderr
 try {
-    if (-not $proc.WaitForExit($TimeoutSeconds*1000)) {
+    $exited=$proc.WaitForExit($TimeoutSeconds*1000)
+    if (-not $exited) {
+        $shot=Join-Path $env:APPDATA 'LOVE\\paint-lua\\ci-smoke.png'
+        Write-Output "Windows timeout: screenshot existe=$(Test-Path -LiteralPath $shot)"
         Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
-        throw "LÖVE Windows: timeout no teste $Mode após $TimeoutSeconds segundos"
+        $proc.WaitForExit(3000) | Out-Null
     }
-    $proc.WaitForExit()
     $output=if (Test-Path $stdout) { Get-Content $stdout -Raw } else { '' }
     $errors=if (Test-Path $stderr) { Get-Content $stderr -Raw } else { '' }
-    if ($output) { Write-Output $output }
+    if ($output) { Write-Output "LÖVE stdout: $output" }
     if ($errors) { Write-Output "LÖVE stderr: $errors" }
+    if (-not $exited) {
+        throw "LÖVE Windows: timeout no teste $Mode após $TimeoutSeconds segundos; logs acima"
+    }
     if ($proc.ExitCode -ne 0) { throw "LÖVE Windows $Mode falhou: exit $($proc.ExitCode)" }
     if ($Mode -eq 'bridge') {
         if (-not $output.Contains('PASS: L')) {
