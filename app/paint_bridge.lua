@@ -41,7 +41,7 @@ function Bridge.new()
     pngPreview=nil,pngDrag=nil,
     cache=nil,gpu={},ants={},selectionAnimated=true,thumbCache=setmetatable({}, {__mode='k'}),
     thumbRenders=0,maskMode=nil,maskOwner=nil,
-    artworkId=nil,filename='meu-desenho.npnt',status='Paint-Lua v0.27 pronto'},Bridge)
+    artworkId=nil,filename='meu-desenho.npnt',status='Paint-Lua v0.39 pronto'},Bridge)
 end
 
 -- Preferência da interface, não do documento: não entra no histórico NPNT.

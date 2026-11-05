@@ -135,3 +135,88 @@ jobs:
           name: Paint-Lua-v0.39-Windows
           path: Paint-Lua-v0.39-Windows.zip
           if-no-files-found: error
+
+  windows_release:
+    name: Verificar ZIP e inicializador no Windows
+    needs: checks
+    runs-on: windows-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - name: Baixar exatamente o ZIP gerado pela CI
+        uses: actions/download-artifact@v4
+        with:
+          name: Paint-Lua-v0.39-Windows
+          path: dist
+      - name: Baixar runtime LÖVE 11.5 oficial e conferir SHA-256
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $ProgressPreference = 'SilentlyContinue'
+          $zip = Join-Path $env:RUNNER_TEMP 'love-11.5-win64.zip'
+          $url = 'https://github.com/love2d/love/releases/download/11.5/love-11.5-win64.zip'
+          Invoke-WebRequest -Uri $url -OutFile $zip -MaximumRetryCount 3
+          $expected = '740ac261c0004c4c082138536e4c5f256c5a4b00e0c38d1a1fda44215e06798f'
+          $actual = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actual -ne $expected) {
+            throw "LÖVE 11.5 SHA-256 incorreto: $actual"
+          }
+          $folder = Join-Path $env:RUNNER_TEMP 'love-11.5-portable'
+          Expand-Archive -LiteralPath $zip -DestinationPath $folder -Force
+          $binary = Get-ChildItem $folder -Recurse -File -Filter love.exe |
+            Select-Object -First 1
+          if (-not $binary) { throw 'love.exe não encontrado no runtime oficial' }
+          "LOVE11_EXE=$($binary.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          & $binary.FullName --version
+          if ($LASTEXITCODE -ne 0) { throw "love.exe --version falhou: $LASTEXITCODE" }
+      - name: Extrair pacote entregue e executar testar.bat no Windows
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $zip = Join-Path (Get-Location) 'dist/Paint-Lua-v0.39-Windows.zip'
+          if (-not (Test-Path -LiteralPath $zip)) { throw "ZIP não encontrado: $zip" }
+          $dest = Join-Path (Get-Location) 'win-release'
+          Expand-Archive -LiteralPath $zip -DestinationPath $dest -Force
+          $env:PAINT_LUA_VERIFY_ONLY = '1'
+          $env:PAINT_LUA_NO_PAUSE = '1'
+          Push-Location $dest
+          try {
+            & cmd.exe /d /c "call testar.bat"
+            if ($LASTEXITCODE -ne 0) {
+              throw "testar.bat falhou em modo de verificação: $LASTEXITCODE"
+            }
+            # O mesmo launcher deve recusar um ZIP incompleto, não encerrar com 0.
+            $script = Join-Path 'app' 'selection_ants.lua'
+            Rename-Item -LiteralPath $script -NewName 'selection_ants.lua.hidden'
+            try {
+              & cmd.exe /d /c "call testar.bat"
+              if ($LASTEXITCODE -ne 5) {
+                throw "testar.bat não detectou asset ausente: $LASTEXITCODE"
+              }
+            } finally {
+              Rename-Item -LiteralPath (Join-Path 'app' 'selection_ants.lua.hidden') -NewName 'selection_ants.lua'
+            }
+          } finally {
+            Pop-Location
+          }
+      - name: Confirmar pasta de extração pronta para uso
+        shell: pwsh
+        run: |
+          $paths = @(
+            'win-release/testar.bat',
+            'win-release/main.lua',
+            'win-release/conf.lua',
+            'win-release/core/selection.lua',
+            'win-release/src/editor_preferences.lua',
+            'win-release/app/ibis_main.lua',
+            'win-release/app/selection_ants.lua',
+            'win-release/assets/icons/png/paintbrush.png'
+          )
+          foreach ($path in $paths) {
+            if (-not (Test-Path -LiteralPath $path)) {
+              throw "Arquivo ausente no ZIP final: $path"
+            }
+          }
+          Write-Output 'PASS: ZIP Windows extraído, LOVE 11.5 validado, testar.bat e falha controlada'
+

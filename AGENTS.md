@@ -147,3 +147,16 @@ A regressão está em `tests/test_selection_contract_integration.lua`
 e no E2E real `tests/test_selection_contract_love.lua`.
 Não abrir mais PRs empilhados até revisão da cadeia #2→#3→#4→#5→#6;
 a `main` não foi alterada pela revisão.
+
+### Gate Windows do pacote final (revisão v0.39)
+
+`.github/workflows/check.yml` inclui `windows_release` dependente do
+job Linux de compilação, testes e upload do ZIP, usando o **mesmo artefato**
+gerado pela CI. Baixa LÖVE 11.5 portátil oficial e verifica SHA-256
+fixo antes de invocar `testar.bat`. O launcher mantém o padrão
+interativo; só quando `PAINT_LUA_VERIFY_ONLY=1` valida a instalação e
+encerra sem abrir a UI, e `PAINT_LUA_NO_PAUSE=1` evita travar automação.
+Testar também a falha com `app/selection_ants.lua` ausente (exit 5).
+Não chamar esse gate "teste manual Windows/GPU", pois só cobre
+distribuição/launcher. As configurações de console/título no `conf.lua`
+foram sincronizadas com v0.39.

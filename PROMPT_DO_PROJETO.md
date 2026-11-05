@@ -140,3 +140,13 @@ máscara vazia, nunca limpar a seleção. Isso inclui obras grandes,
 NPNT5 e undo/redo. O desenho ignora uma máscara vazia antes do shader,
 sem ocultar o arraste de uma seleção em andamento. Revisar a cadeia
 de PRs #2–#6 antes de novos recursos; não modificar `main` sem decisão.
+
+### Gate de distribuição Windows v0.39
+
+A CI executa teste Linux (LÖVE real, GPU, persistência, NPNT1–NPNT5)
+seguido de job `windows_release`. O Windows descompacta o ZIP gerado
+pela CI e chama `testar.bat` com LÖVE 11.5 portátil cuja SHA-256 é
+validada. As flags de automação `PAINT_LUA_VERIFY_ONLY=1` e
+`PAINT_LUA_NO_PAUSE=1` não mudam o comportamento padrão do usuário.
+Não tratar a verificação do launcher como prova de desenho real
+no Windows ou de caneta/mesa digitalizadora.

@@ -2,6 +2,20 @@
 
 Editor experimental de pintura digital em Lua / LÖVE 11.5. A interface de Ibis-Lua e o núcleo de pintura v0.21 são **código-fonte do mesmo repositório**. Não há submódulos, download do Ibis-Lua na inicialização ou integração atual com DragonBones/Bono-Lua.
 
+## Verificação automatizada no Windows
+
+A CI da versão v0.39 agora executa **dois jobs**: o teste completo
+de pixels e interface no LÖVE 11.5 no Linux e uma verificação adicional
+em **`windows-latest`** do ZIP realmente disponibilizado ao usuário.
+O job Windows extrai o pacote, baixa e valida por SHA-256 o runtime
+portátil oficial do LÖVE 11.5, executa `testar.bat` com
+`PAINT_LUA_VERIFY_ONLY=1` e comprova que o launcher recusa um arquivo
+essencial ausente. Esse modo de verificação **não abre a interface**;
+no uso normal, `testar.bat` continua a abrir o editor normalmente.
+
+A verificação automatizada do inicializador Windows **não é** uma
+validação manual de desenho, desempenho, stylus ou GPU.
+
 ## Teste no Windows
 
 1. Instale LÖVE 11.5: https://love2d.org/.
