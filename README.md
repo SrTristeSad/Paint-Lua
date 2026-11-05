@@ -443,3 +443,13 @@ de reabrir o arquivo. A tentativa recusada não altera a pintura,
 o histórico ou o trabalho em andamento. Abrir outra obra
 deliberadamente pela galeria continua usando o fluxo próprio.
 Regressões: `tests/test_reload_during_operations_v039.lua`.
+
+### Confirmar uma seleção durante um preenchimento
+
+Se um preenchimento ou outro trabalho bloquear o histórico depois
+que você começar um retângulo ou laço, o editor não descarta mais
+o gesto ao tentar confirmá-lo. Ele mantém o traçado e a seleção
+anterior até que o trabalho termine ou seja cancelado. Assim, é
+possível confirmar a seleção sem redesenhá-la e sem gerar ações
+duplicadas no histórico. Testes:
+`tests/test_selection_finish_race_v039.lua`.

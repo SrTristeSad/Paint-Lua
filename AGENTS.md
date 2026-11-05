@@ -304,3 +304,15 @@ cancelar, permitir recarga NPNT e de obra da galeria normalmente.
 Não bloquear `Bridge:attachDocument` usado intencionalmente
 para mudar de obra pela galeria.
 Teste: `tests/test_reload_during_operations_v039.lua` (32).
+
+### Confirmação de seleção sob lock adquirido depois do início (v0.39)
+
+Em `Bridge:finishSelection`, verificar `self.stroke`, `self.job`,
+`self.transform`, `self.pngPreview`, `doc.history._fillLock` e
+`doc.history.stroke` **antes** de zerar `self.selectionDrag`.
+Se a operação concorrente impedir a confirmação, manter gesto,
+pontos, modo de combinação, seleção anterior e undo/redo; só a
+confirmação bem-sucedida pode criar snapshot. Retomar depois do
+desbloqueio sem criar snapshots extra. Sem lock, laço degenerado
+continua sendo descartado como anteriormente. Regressões:
+`tests/test_selection_finish_race_v039.lua` (31).

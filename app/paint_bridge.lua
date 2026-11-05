@@ -685,6 +685,15 @@ function Bridge:finishSelection(model,view,prefs,uiScale,W,H,rx,ry)
   local drag=self.selectionDrag
   if not drag then return false end
   if rx then self:moveSelection(model,view,prefs,uiScale,W,H,rx,ry) end
+  -- Um balde ou gesto externo pode adquirir o lock APÓS beginSelection.
+  -- Não descartar o arraste antes de saber se é possível confirmá-lo:
+  -- a recusa precisa preservar pontos, seleção anterior e undo/redo.
+  local doc=self.doc
+  if not doc or self.stroke or self.job or self.transform or self.pngPreview
+    or doc.history._fillLock or doc.history.stroke then
+    self.status='Conclua a operação atual antes de confirmar a seleção'
+    return false
+  end
   self.selectionDrag=nil
   local selection
   if drag.kind=='selection_rect' then

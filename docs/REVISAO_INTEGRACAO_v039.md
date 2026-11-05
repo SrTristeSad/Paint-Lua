@@ -363,3 +363,29 @@ real, prévia PNG, varinha, balde cooperativo externo antes/depois
 de pixels parciais, pinceladas internas/externas, rollback,
 reabertura NPNT e caminho de galeria. O projeto salvo não muda
 durante uma recusa.
+
+## Confirmação de seleções após aquisição tardia de bloqueio (v0.39)
+
+Havia uma janela entre iniciar um retângulo/laço e soltar o mouse:
+`Bridge:finishSelection` fazia `self.selectionDrag=nil` antes de
+chamar `combineSelection`. Se nesse intervalo um balde cooperativo
+externo, uma pincelada direta no histórico ou um job concorrente
+ativasse a proteção, a combinação era recusada e **o arraste já
+havia sido descartado**, embora a seleção e o histórico antigos
+continuassem intactos.
+
+A confirmação agora verifica primeiro `self.stroke`,
+`self.job`, `self.transform`, `self.pngPreview` e os estados
+`doc.history._fillLock`/`doc.history.stroke`. Enquanto a operação
+concorrente não termina, os pontos e o modo original do gesto,
+a seleção anterior e as pilhas de undo/redo são preservados.
+Depois de liberar o lock, o gesto pode ser confirmado normalmente,
+criando um único snapshot. O cancelamento explícito com Escape
+continua disponível; laços degenerados sem lock continuam a
+ser descartados, como antes.
+
+A regressão `tests/test_selection_finish_race_v039.lua` contém
+31 verificações: retângulo iniciado antes de um balde externo,
+preenchimento antes/depois de produzir pixels provisórios, rollback,
+histórico com redo pendente, laço em modo Adicionar com uma pincelada
+externa, job da ponte e o comportamento de um laço incompleto.
