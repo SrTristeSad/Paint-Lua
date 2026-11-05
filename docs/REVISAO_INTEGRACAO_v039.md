@@ -133,3 +133,26 @@ verificações das rotas `selectAll`, `applySelection`, `combineSelection`,
 `invertSelection`, `clearSelection`, liberação dos bloqueios e
 desfazer/refazer após concluir a operação. Não há alteração de NPNT,
 pixels ou preferência visual. Essa revisão permanece no PR #6.
+
+## Bloqueio de seleção durante preenchimento cooperativo
+
+A última revisão incluiu o lock transacional `doc.history._fillLock` do
+balde cooperativo nas entradas `Bridge:applySelection`,
+`Bridge:canEditStructure` e na sincronização de propriedades
+`Bridge:sync`. Antes, uma operação externa de `Fill.newJob`
+podia deixar o histórico bloqueado sem criar `bridge.job`; atalhos
+como Ctrl+A e alterações de camada chegavam a
+`History.recordStructure` e lançavam um erro, em vez de recusar
+a ação sem alterar o documento.
+
+Agora seleção, camada e histórico são preservados enquanto a
+transação estiver suspensa, inclusive após os primeiros pixels
+temporários. Se a UI modificar o nome de uma camada durante a
+transação, `sync` adia a alteração até que o balde termine ou seja
+cancelado. Após cancelar, o preenchimento reverte os pixels parciais,
+o lock é liberado e as operações voltam a funcionar normalmente.
+
+A bateria `tests/test_selection_fill_lock_v039.lua` cobre essas rotas
+com um trabalho `Fill.newJob` autêntico, incluindo cancelamento,
+histórico, Ctrl+A, desmarcar, inversão, combinação e sincronização.
+Não há alteração do formato NPNT ou do comportamento de desenho.

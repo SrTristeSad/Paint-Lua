@@ -36,6 +36,7 @@ jobs:
           test -f tests/test_selection_pause_v039.lua
           test -f tests/test_selection_contract_integration.lua
           test -f tests/test_selection_operation_lock_v039.lua
+          test -f tests/test_selection_fill_lock_v039.lua
           test -f tests/test_selection_contract_love.lua
           test -f tests/test_editor_preferences.lua
           test -f tests/test_selection_ants_love_v038.lua
@@ -59,7 +60,7 @@ jobs:
           lua5.4 tests/test_core.lua > core-results.log
           tail -n 5 core-results.log
           grep -Eq '^[0-9]+ passou, 0 falhou$' core-results.log
-          awk '/passou, 0 falhou/ {if ($1<1376) exit 1; ok=1} END {if (!ok) exit 1}' core-results.log
+          awk '/passou, 0 falhou/ {if ($1<1394) exit 1; ok=1} END {if (!ok) exit 1}' core-results.log
       - name: Testes do modelo e navegação
         run: |
           lua5.4 scripts/smoke-core.lua
@@ -124,7 +125,272 @@ jobs:
           unzip -Z1 Paint-Lua-v0.39-Windows.zip | grep -q '^tests/test_selection_ants_love_v038.lua$'
           unzip -Z1 Paint-Lua-v0.39-Windows.zip | grep -q '^tests/test_selection_pause_v039.lua$'
           unzip -Z1 Paint-Lua-v0.39-Windows.zip | grep -q '^tests/test_selection_contract_integration.lua$'
-          unzip -Z1 Paint-Lua-v0.39-Windows.zip | grep -q '^tests/test_selection_operation_lock_v039.lua$'
+          unzip -Z1 Paint-Lua-v0.39-Windows.zip | grep -q '^tests/test_selection_operation_lock_v039.lua
+          unzip -Z1 Paint-Lua-v0.39-Windows.zip | grep -q '^tests/test_selection_contract_love.lua$'
+          unzip -Z1 Paint-Lua-v0.39-Windows.zip | grep -q '^src/editor_preferences.lua$'
+          unzip -Z1 Paint-Lua-v0.39-Windows.zip | grep -q '^app/selection_ants.lua$'
+          unzip -Z1 Paint-Lua-v0.39-Windows.zip | grep -q '^docs/REVISAO_INTEGRACAO_v039.md$'
+          unzip -Z1 Paint-Lua-v0.39-Windows.zip | grep -q '^testar.bat$'
+          unzip -Z1 Paint-Lua-v0.39-Windows.zip | grep -q '^scripts/windows-love-e2e.ps1$'
+          sha256sum Paint-Lua-v0.39-Windows.zip
+      - name: Disponibilizar ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: Paint-Lua-v0.39-Windows
+          path: Paint-Lua-v0.39-Windows.zip
+          if-no-files-found: error
+
+  windows_release:
+    name: Verificar ZIP e inicializador no Windows
+    needs: checks
+    runs-on: windows-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - name: Baixar exatamente o ZIP gerado pela CI
+        uses: actions/download-artifact@v4
+        with:
+          name: Paint-Lua-v0.39-Windows
+          path: dist
+      - name: Baixar runtime LÖVE 11.5 oficial e conferir SHA-256
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $ProgressPreference = 'SilentlyContinue'
+          $zip = Join-Path $env:RUNNER_TEMP 'love-11.5-win64.zip'
+          $url = 'https://github.com/love2d/love/releases/download/11.5/love-11.5-win64.zip'
+          Invoke-WebRequest -Uri $url -OutFile $zip -MaximumRetryCount 3
+          # Hash do asset atual confirmado também pelo manifesto Scoop (love 11.5).
+          $expected = 'ba6e56be2685e53c817749c4a5007f51137136fe5a3ab64920508babc2e74369'
+          $actual = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actual -ne $expected) {
+            throw "LÖVE 11.5 SHA-256 incorreto: $actual"
+          }
+          $folder = Join-Path $env:RUNNER_TEMP 'love-11.5-portable'
+          Expand-Archive -LiteralPath $zip -DestinationPath $folder -Force
+          $binary = Get-ChildItem $folder -Recurse -File -Filter love.exe |
+            Select-Object -First 1
+          if (-not $binary) { throw 'love.exe não encontrado no runtime oficial' }
+          "LOVE11_EXE=$($binary.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          # love.exe usa o subsistema gráfico do Windows e não oferece
+          # exit code síncrono no PowerShell. Testar o irmão de console.
+          $console = Get-ChildItem $folder -Recurse -File -Filter lovec.exe |
+            Select-Object -First 1
+          if (-not $console) { throw 'lovec.exe ausente no runtime oficial' }
+          & $console.FullName --version
+          if ($LASTEXITCODE -ne 0) { throw "lovec.exe --version falhou: $LASTEXITCODE" }
+          "LOVEC11_EXE=$($console.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+      - name: Extrair pacote entregue e executar testar.bat no Windows
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $zip = Join-Path (Get-Location) 'dist/Paint-Lua-v0.39-Windows.zip'
+          if (-not (Test-Path -LiteralPath $zip)) { throw "ZIP não encontrado: $zip" }
+          $dest = Join-Path (Get-Location) 'win-release'
+          Expand-Archive -LiteralPath $zip -DestinationPath $dest -Force
+          $env:PAINT_LUA_VERIFY_ONLY = '1'
+          $env:PAINT_LUA_NO_PAUSE = '1'
+          Push-Location $dest
+          try {
+            & cmd.exe /d /c "call testar.bat"
+            if ($LASTEXITCODE -ne 0) {
+              throw "testar.bat falhou em modo de verificação: $LASTEXITCODE"
+            }
+            # O mesmo launcher deve recusar um ZIP incompleto, não encerrar com 0.
+            $script = Join-Path 'app' 'selection_ants.lua'
+            Rename-Item -LiteralPath $script -NewName 'selection_ants.lua.hidden'
+            try {
+              # Um exit 5 é o resultado esperado; usar Start-Process
+              # evita que pwsh com ErrorActionPreference=Stop o converta
+              # automaticamente em erro antes de examinarmos o código.
+              $failed = Start-Process -FilePath cmd.exe -Wait -PassThru -NoNewWindow `
+                -ArgumentList '/d /c "call testar.bat"'
+              if ($failed.ExitCode -ne 5) {
+                throw "testar.bat não detectou asset ausente: $($failed.ExitCode)"
+              }
+            } finally {
+              Rename-Item -LiteralPath (Join-Path 'app' 'selection_ants.lua.hidden') -NewName 'selection_ants.lua'
+            }
+          } finally {
+            Pop-Location
+          }
+      - name: Confirmar pasta de extração pronta para uso
+        shell: pwsh
+        run: |
+          $paths = @(
+            'win-release/testar.bat',
+            'win-release/main.lua',
+            'win-release/conf.lua',
+            'win-release/core/selection.lua',
+            'win-release/src/editor_preferences.lua',
+            'win-release/app/ibis_main.lua',
+            'win-release/app/selection_ants.lua',
+            'win-release/assets/icons/png/paintbrush.png'
+          )
+          foreach ($path in $paths) {
+            if (-not (Test-Path -LiteralPath $path)) {
+              throw "Arquivo ausente no ZIP final: $path"
+            }
+          }
+          # Validar sintaxe do script extraído antes de tentar abrir janela.
+          $tokens = $null
+          $parseErrors = $null
+          $script = Join-Path (Get-Location) 'win-release/scripts/windows-love-e2e.ps1'
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            $script, [ref]$tokens, [ref]$parseErrors) | Out-Null
+          if ($parseErrors.Count -ne 0) {
+            throw "Script de teste Windows inválido: $($parseErrors[0])"
+          }
+          Write-Output 'PASS: ZIP Windows extraído, LOVE 11.5 validado, testar.bat e falha controlada'
+      - name: Inicialização real da interface no LÖVE 11.5 Windows
+        shell: pwsh
+        run: |
+          & ./win-release/scripts/windows-love-e2e.ps1 `
+            -LoveConsole $env:LOVEC11_EXE -ProjectDirectory './win-release' `
+            -Mode smoke -TimeoutSeconds 35 -AllowMissingGraphics
+      - name: Integração real NPNT, seleção e GPU no LÖVE 11.5 Windows
+        if: env.PAINT_LUA_GRAPHICS_UNAVAILABLE != '1'
+        shell: pwsh
+        run: |
+          & ./win-release/scripts/windows-love-e2e.ps1 `
+            -LoveConsole $env:LOVEC11_EXE -ProjectDirectory './win-release' `
+            -Mode bridge -TimeoutSeconds 120
+
+
+          unzip -Z1 Paint-Lua-v0.39-Windows.zip | grep -q '^tests/test_selection_fill_lock_v039.lua
+          unzip -Z1 Paint-Lua-v0.39-Windows.zip | grep -q '^tests/test_selection_contract_love.lua$'
+          unzip -Z1 Paint-Lua-v0.39-Windows.zip | grep -q '^src/editor_preferences.lua$'
+          unzip -Z1 Paint-Lua-v0.39-Windows.zip | grep -q '^app/selection_ants.lua$'
+          unzip -Z1 Paint-Lua-v0.39-Windows.zip | grep -q '^docs/REVISAO_INTEGRACAO_v039.md$'
+          unzip -Z1 Paint-Lua-v0.39-Windows.zip | grep -q '^testar.bat$'
+          unzip -Z1 Paint-Lua-v0.39-Windows.zip | grep -q '^scripts/windows-love-e2e.ps1$'
+          sha256sum Paint-Lua-v0.39-Windows.zip
+      - name: Disponibilizar ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: Paint-Lua-v0.39-Windows
+          path: Paint-Lua-v0.39-Windows.zip
+          if-no-files-found: error
+
+  windows_release:
+    name: Verificar ZIP e inicializador no Windows
+    needs: checks
+    runs-on: windows-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - name: Baixar exatamente o ZIP gerado pela CI
+        uses: actions/download-artifact@v4
+        with:
+          name: Paint-Lua-v0.39-Windows
+          path: dist
+      - name: Baixar runtime LÖVE 11.5 oficial e conferir SHA-256
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $ProgressPreference = 'SilentlyContinue'
+          $zip = Join-Path $env:RUNNER_TEMP 'love-11.5-win64.zip'
+          $url = 'https://github.com/love2d/love/releases/download/11.5/love-11.5-win64.zip'
+          Invoke-WebRequest -Uri $url -OutFile $zip -MaximumRetryCount 3
+          # Hash do asset atual confirmado também pelo manifesto Scoop (love 11.5).
+          $expected = 'ba6e56be2685e53c817749c4a5007f51137136fe5a3ab64920508babc2e74369'
+          $actual = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actual -ne $expected) {
+            throw "LÖVE 11.5 SHA-256 incorreto: $actual"
+          }
+          $folder = Join-Path $env:RUNNER_TEMP 'love-11.5-portable'
+          Expand-Archive -LiteralPath $zip -DestinationPath $folder -Force
+          $binary = Get-ChildItem $folder -Recurse -File -Filter love.exe |
+            Select-Object -First 1
+          if (-not $binary) { throw 'love.exe não encontrado no runtime oficial' }
+          "LOVE11_EXE=$($binary.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          # love.exe usa o subsistema gráfico do Windows e não oferece
+          # exit code síncrono no PowerShell. Testar o irmão de console.
+          $console = Get-ChildItem $folder -Recurse -File -Filter lovec.exe |
+            Select-Object -First 1
+          if (-not $console) { throw 'lovec.exe ausente no runtime oficial' }
+          & $console.FullName --version
+          if ($LASTEXITCODE -ne 0) { throw "lovec.exe --version falhou: $LASTEXITCODE" }
+          "LOVEC11_EXE=$($console.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+      - name: Extrair pacote entregue e executar testar.bat no Windows
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $zip = Join-Path (Get-Location) 'dist/Paint-Lua-v0.39-Windows.zip'
+          if (-not (Test-Path -LiteralPath $zip)) { throw "ZIP não encontrado: $zip" }
+          $dest = Join-Path (Get-Location) 'win-release'
+          Expand-Archive -LiteralPath $zip -DestinationPath $dest -Force
+          $env:PAINT_LUA_VERIFY_ONLY = '1'
+          $env:PAINT_LUA_NO_PAUSE = '1'
+          Push-Location $dest
+          try {
+            & cmd.exe /d /c "call testar.bat"
+            if ($LASTEXITCODE -ne 0) {
+              throw "testar.bat falhou em modo de verificação: $LASTEXITCODE"
+            }
+            # O mesmo launcher deve recusar um ZIP incompleto, não encerrar com 0.
+            $script = Join-Path 'app' 'selection_ants.lua'
+            Rename-Item -LiteralPath $script -NewName 'selection_ants.lua.hidden'
+            try {
+              # Um exit 5 é o resultado esperado; usar Start-Process
+              # evita que pwsh com ErrorActionPreference=Stop o converta
+              # automaticamente em erro antes de examinarmos o código.
+              $failed = Start-Process -FilePath cmd.exe -Wait -PassThru -NoNewWindow `
+                -ArgumentList '/d /c "call testar.bat"'
+              if ($failed.ExitCode -ne 5) {
+                throw "testar.bat não detectou asset ausente: $($failed.ExitCode)"
+              }
+            } finally {
+              Rename-Item -LiteralPath (Join-Path 'app' 'selection_ants.lua.hidden') -NewName 'selection_ants.lua'
+            }
+          } finally {
+            Pop-Location
+          }
+      - name: Confirmar pasta de extração pronta para uso
+        shell: pwsh
+        run: |
+          $paths = @(
+            'win-release/testar.bat',
+            'win-release/main.lua',
+            'win-release/conf.lua',
+            'win-release/core/selection.lua',
+            'win-release/src/editor_preferences.lua',
+            'win-release/app/ibis_main.lua',
+            'win-release/app/selection_ants.lua',
+            'win-release/assets/icons/png/paintbrush.png'
+          )
+          foreach ($path in $paths) {
+            if (-not (Test-Path -LiteralPath $path)) {
+              throw "Arquivo ausente no ZIP final: $path"
+            }
+          }
+          # Validar sintaxe do script extraído antes de tentar abrir janela.
+          $tokens = $null
+          $parseErrors = $null
+          $script = Join-Path (Get-Location) 'win-release/scripts/windows-love-e2e.ps1'
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            $script, [ref]$tokens, [ref]$parseErrors) | Out-Null
+          if ($parseErrors.Count -ne 0) {
+            throw "Script de teste Windows inválido: $($parseErrors[0])"
+          }
+          Write-Output 'PASS: ZIP Windows extraído, LOVE 11.5 validado, testar.bat e falha controlada'
+      - name: Inicialização real da interface no LÖVE 11.5 Windows
+        shell: pwsh
+        run: |
+          & ./win-release/scripts/windows-love-e2e.ps1 `
+            -LoveConsole $env:LOVEC11_EXE -ProjectDirectory './win-release' `
+            -Mode smoke -TimeoutSeconds 35 -AllowMissingGraphics
+      - name: Integração real NPNT, seleção e GPU no LÖVE 11.5 Windows
+        if: env.PAINT_LUA_GRAPHICS_UNAVAILABLE != '1'
+        shell: pwsh
+        run: |
+          & ./win-release/scripts/windows-love-e2e.ps1 `
+            -LoveConsole $env:LOVEC11_EXE -ProjectDirectory './win-release' `
+            -Mode bridge -TimeoutSeconds 120
+
+
           unzip -Z1 Paint-Lua-v0.39-Windows.zip | grep -q '^tests/test_selection_contract_love.lua$'
           unzip -Z1 Paint-Lua-v0.39-Windows.zip | grep -q '^src/editor_preferences.lua$'
           unzip -Z1 Paint-Lua-v0.39-Windows.zip | grep -q '^app/selection_ants.lua$'

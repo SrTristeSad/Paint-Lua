@@ -131,6 +131,13 @@ function Bridge:sync(model)
     changed=true
   end
   if changed and not fresh then
+    -- O preenchimento cooperativo pode manter o histórico bloqueado
+    -- mesmo sem um job pertencente a esta instância da ponte.
+    -- Adiar propriedades da UI evita snapshots durante pixels parciais.
+    if doc.history._fillLock or (doc.history.stroke and not self.stroke) then
+      self.status='Conclua o preenchimento antes de alterar camadas'
+      return nil
+    end
     self:finish(false)
     if self.job then return nil end -- propriedades mudam após finalizar o job
     History.recordStructure(doc)
@@ -270,7 +277,8 @@ end
 function Bridge:canEditStructure(model)
   local doc=self:sync(model)
   if not doc then self.status='Abra um documento';return nil end
-  if self.stroke or self.job or self.transform or self.selectionDrag or self.pngPreview then
+  if self.stroke or self.job or self.transform or self.selectionDrag
+    or self.pngPreview or doc.history.stroke or doc.history._fillLock then
     self.status='Finalize a operação atual antes de editar camadas';return nil
   end
   return doc
@@ -518,7 +526,8 @@ function Bridge:applySelection(selection)
   -- Uma seleção pendente, prévia de PNG ou pincelada não pode criar
   -- um snapshot estrutural concorrente e sobrescrever seu estado.
   if self.stroke or self.job or self.transform or self.selectionDrag
-    or self.pngPreview or self.doc.history.stroke then
+    or self.pngPreview or self.doc.history.stroke
+    or self.doc.history._fillLock then
     self.status='Conclua a operação atual antes de alterar a seleção'
     return false
   end

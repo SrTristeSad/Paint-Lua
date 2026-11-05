@@ -41,8 +41,8 @@ Clone alternativo: git clone https://github.com/SrTristeSad/Paint-Lua.git (sem -
 
 Os comandos **Selecionar tudo**, **Inverter**, **Combinar** e
 **Desmarcar** compartilham agora a mesma proteção contra mudanças
-enquanto há uma pincelada, arraste de seleção, transformação ou
-prévia de PNG em andamento. Isso evita alterar a seleção e criar
+enquanto há uma pincelada, **preenchimento cooperativo**, arraste de
+seleção, transformação ou prévia de PNG em andamento. Isso evita alterar a seleção e criar
 histórico intermediário antes de concluir o gesto. As ferramentas
 continuam funcionando normalmente quando a operação termina.
 

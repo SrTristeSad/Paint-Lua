@@ -189,3 +189,15 @@ antes de combinar o resultado: não bloquear o commit legítimo.
 antes de retirar a área. Testes em
 `tests/test_selection_operation_lock_v039.lua`. Manter NPNT e pixels
 intocados; `main` não foi modificada.
+
+### Lock externo do preenchimento cooperativo
+
+`Bridge:applySelection`, `Bridge:canEditStructure` e a sincronização
+de propriedades em `Bridge:sync` verificam o token
+`doc.history._fillLock`, mesmo quando `bridge.job` é nil (job do
+motor externo ao controlador). Recusar atalhos/mutação enquanto o balde
+possui pixels parciais e adiar a atualização de camada na UI,
+sem lançar `History.recordStructure` bloqueado. Testes integrados
+em `tests/test_selection_fill_lock_v039.lua`: lock antes da primeira
+fatia, pixels parciais, cancelamento com rollback, aplicação de camada
+adiada e Ctrl+A/undo/redo após liberar. Preservar NPNT e `main`.
