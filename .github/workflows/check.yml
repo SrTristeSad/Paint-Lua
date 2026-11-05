@@ -157,7 +157,8 @@ jobs:
           $zip = Join-Path $env:RUNNER_TEMP 'love-11.5-win64.zip'
           $url = 'https://github.com/love2d/love/releases/download/11.5/love-11.5-win64.zip'
           Invoke-WebRequest -Uri $url -OutFile $zip -MaximumRetryCount 3
-          $expected = '740ac261c0004c4c082138536e4c5f256c5a4b00e0c38d1a1fda44215e06798f'
+          # Hash do asset atual confirmado também pelo manifesto Scoop (love 11.5).
+          $expected = 'ba6e56be2685e53c817749c4a5007f51137136fe5a3ab64920508babc2e74369'
           $actual = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToLowerInvariant()
           if ($actual -ne $expected) {
             throw "LÖVE 11.5 SHA-256 incorreto: $actual"
