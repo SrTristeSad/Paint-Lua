@@ -16,7 +16,7 @@ return function(check)
   local layer=doc.layers[doc.sel]
   local fs=love.filesystem
   local savedWrite,savedGetInfo,savedMkdir=fs.write,fs.getInfo,fs.createDirectory
-  local written={},directories=0
+  local written,directories={},0
   fs.getInfo=function(path)
     return written[path] and {type='file'} or nil
   end
