@@ -1254,11 +1254,19 @@ end
 -- A exportação nunca modifica a pintura nem substitui um PNG existente.
 function Bridge:exportPNG(model)
   if not self.doc then return nil,'nenhum documento aberto' end
-  if self.transform or self.job or self.selectionDrag or self.pngPreview then
-    return nil,'conclua ou cancele a operação antes de exportar'
+  if self.transform or self.job or self.selectionDrag or self.pngPreview
+    or self.doc.history._fillLock or
+    (self.doc.history.stroke and not self.stroke) then
+    self.status='Conclua ou cancele a operação antes de exportar'
+    return nil,self.status
   end
   self:finish(false)
-  if model then self:sync(model) end
+  -- Se alterações de camada ainda não puderem ser sincronizadas,
+  -- não exportar uma composição desatualizada.
+  if model and not self:sync(model) then
+    self.status='Não foi possível sincronizar as camadas antes de exportar'
+    return nil,self.status
+  end
   local path,err=PNGExport.save(self.doc,self.artworkId or 'atual')
   self.status=path and ('PNG exportado em '..path) or ('Exportação: '..tostring(err))
   return path,err

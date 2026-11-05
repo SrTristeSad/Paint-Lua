@@ -389,3 +389,14 @@ a camada usada por um trabalho ainda em andamento. O controle de
 opacidade mantém seu comportamento anterior, sem criar uma ação de
 desfazer para cada atualização; a regressão está em
 `tests/test_layer_sync_during_jobs_v039.lua`.
+
+### Exportar PNG somente depois de concluir a operação
+
+A exportação PNG aguarda a conclusão ou o cancelamento do balde
+cooperativo e de pinceladas ainda abertas, inclusive quando essas
+operações são iniciadas diretamente pelo motor. O aplicativo nunca
+grava uma imagem de pixels provisórios que poderiam desaparecer após
+um cancelamento. Com o documento liberado, a exportação aplica as
+propriedades pendentes das camadas e continua criando nomes
+incrementais sem sobrescrever PNGs existentes. Testes:
+`tests/test_png_export_operation_lock_v039.lua`.

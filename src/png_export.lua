@@ -17,6 +17,13 @@ function Export.save(doc,id)
   if not (type(doc)=='table' and validInteger(doc.w) and validInteger(doc.h)) then
     return nil,'dimensões inválidas'
   end
+  -- A composição lê tiles mutáveis: nunca exportar frames com pixels
+  -- parciais de um balde cooperativo ou outro gesto não confirmado.
+  -- O contrato vale também para quem chama a API diretamente.
+  local h=doc.history
+  if h and (h._fillLock or h.stroke) then
+    return nil,'conclua ou cancele a operação antes de exportar PNG'
+  end
   if doc.w>Export.MAX_SIDE or doc.h>Export.MAX_SIDE or
     doc.w*doc.h>Export.MAX_PIXELS then
     return nil,'PNG excede o limite de 4.194.304 pixels; o arquivo NPNT permanece seguro'

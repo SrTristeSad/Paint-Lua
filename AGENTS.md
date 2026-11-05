@@ -240,3 +240,15 @@ retornar nil e preservar as mudanças no modelo para aplicação
 posterior. Opacidade continua sem histórico por frame; snapshot só
 para alterações estruturais. Testes em
 `tests/test_layer_sync_during_jobs_v039.lua`.
+
+### Transações abertas proíbem exportação PNG (v0.39)
+
+`src/png_export.lua` deve rejeitar `Export.save(doc)` quando
+`doc.history._fillLock` ou `doc.history.stroke` estiverem ativos,
+antes de compor, criar pastas ou gravar PNGs. Mesmo que o balde não
+seja `Bridge.job`, `Bridge:exportPNG` também deve rejeitar e
+exibir erro, sem exportar uma imagem provisória. Antes de exportar,
+verificar o resultado de `Bridge:sync(model)`; não ignorar um nil
+devido a operação pendente ou estado fora do editor. O controle
+de opacidade é sincronizado após o rollback sem criar undo por frame.
+Testes em `tests/test_png_export_operation_lock_v039.lua` (19).

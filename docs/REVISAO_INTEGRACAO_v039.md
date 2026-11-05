@@ -228,3 +228,28 @@ frame**. Renomear uma camada continua criando exatamente um snapshot.
 `tests/test_layer_sync_during_jobs_v039.lua` cobre o trabalho real
 do balde antes e depois de produzir pixels, cancelamento com rollback,
 a varinha, propriedades pendentes e histórico após liberar o job.
+
+## Exportação PNG protegida contra pixels provisórios (v0.39)
+
+O histórico já bloqueava o salvamento NPNT durante um preenchimento
+cooperativo, mas `PNGExport.save` não verificava o token
+`doc.history._fillLock`. Um balde criado diretamente por `Fill.newJob`,
+sem estar registrado em `Bridge.job`, podia deixar pixels parciais no
+documento; um comando de exportação PNG compunha e gravava esses pixels
+mesmo que o balde fosse cancelado depois. Era possível exportar também
+durante uma pincelada externa aberta (`doc.history.stroke`).
+
+A API de exportação agora retorna erro claro **antes** de renderizar,
+criar o diretório ou gravar bytes quando existe uma transação ativa.
+`Bridge:exportPNG` recusa também essas operações externas e verifica
+o retorno de `Bridge:sync(model)`; antes, mesmo que a sincronização
+falhasse, exportava a versão anterior das propriedades da camada.
+Depois de cancelar o trabalho, a exportação aplica as propriedades
+pendentes e preserva o comportamento já existente de criar nomes
+incrementais, sem sobrescrever imagens anteriores.
+
+`tests/test_png_export_operation_lock_v039.lua` contém 19 verificações
+com o balde cooperativo real, pixels parciais e rollback, controle de
+opacidade pendente, pincelada externa, saída PNG real via mock de
+filesystem e rejeição de exportação quando o modelo está fora do
+editor. Não há mudança do formato PNG ou NPNT.
