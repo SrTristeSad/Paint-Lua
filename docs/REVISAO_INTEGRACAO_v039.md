@@ -111,3 +111,25 @@ O caminho acima é apenas um exemplo; utilize o caminho real do seu
 runtime. Executar **sem** `-AllowMissingGraphics` mantém a validação
 estrita. Testes manuais com caneta, pressão e performance permanecem
 pendentes.
+
+## Operações de seleção concorrentes (revisão v0.39)
+
+Uma inconsistência foi corrigida em `Bridge:applySelection`: o
+atalho **Selecionar tudo** (Ctrl+A) usava um caminho mais permissivo
+que **Inverter** e **Combinar**. Durante um arraste de seleção ainda
+não confirmado, prévia de importação PNG ou traço ativo no histórico,
+isso poderia criar um snapshot estrutural prematuro e alterar o
+estado de seleção no meio de outra operação.
+
+Agora `applySelection` é o bloqueio comum de todas as operações
+de seleção: recusa mutação durante pincelada, trabalho cooperativo,
+transformação, arraste, prévia PNG ou `history.stroke`. A seleção
+anterior e o histórico ficam inalterados, e o usuário recebe a
+mensagem para concluir a operação atual. O comportamento explícito
+de **Desmarcar** que cancela um arraste de seleção continua preservado.
+
+`tests/test_selection_operation_lock_v039.lua` acrescenta 21
+verificações das rotas `selectAll`, `applySelection`, `combineSelection`,
+`invertSelection`, `clearSelection`, liberação dos bloqueios e
+desfazer/refazer após concluir a operação. Não há alteração de NPNT,
+pixels ou preferência visual. Essa revisão permanece no PR #6.

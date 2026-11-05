@@ -176,3 +176,16 @@ Somente quando a saída comprovar **exatamente esse erro**, a flag
 Outros problemas continuam falhando a CI. Não confundir skip com teste
 gráfico Windows aprovado, nem com teste manual de caneta/performance.
 Em Windows de usuário final, rodar sem essa flag para verificação estrita.
+
+### Guard central de seleção (última revisão do PR #6)
+
+`Bridge:applySelection(selection)` deve recusar novas mutações quando
+`stroke`, `job`, `transform`, `selectionDrag`, `pngPreview`
+ou `doc.history.stroke` estiverem ativos. Isso vale para atalhos
+Ctrl+A, o painel e chamadas diretas; evita snapshots estruturais
+durante uma prévia/gesto. `finishSelection` zera `selectionDrag`
+antes de combinar o resultado: não bloquear o commit legítimo.
+`clearSelection` continua cancelando explicitamente o arraste
+antes de retirar a área. Testes em
+`tests/test_selection_operation_lock_v039.lua`. Manter NPNT e pixels
+intocados; `main` não foi modificada.

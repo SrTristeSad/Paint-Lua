@@ -37,6 +37,18 @@ testar canetas, mesas digitalizadoras e desempenho em outras GPUs.
 
 Clone alternativo: git clone https://github.com/SrTristeSad/Paint-Lua.git (sem --recurse-submodules).
 
+## Proteção das operações de seleção
+
+Os comandos **Selecionar tudo**, **Inverter**, **Combinar** e
+**Desmarcar** compartilham agora a mesma proteção contra mudanças
+enquanto há uma pincelada, arraste de seleção, transformação ou
+prévia de PNG em andamento. Isso evita alterar a seleção e criar
+histórico intermediário antes de concluir o gesto. As ferramentas
+continuam funcionando normalmente quando a operação termina.
+
+Detalhes e testes em
+[docs/REVISAO_INTEGRACAO_v039.md](docs/REVISAO_INTEGRACAO_v039.md).
+
 ## Revisão de integração v0.35–v0.39
 
 A revisão da linha de desenvolvimento identificou e corrigiu um caso

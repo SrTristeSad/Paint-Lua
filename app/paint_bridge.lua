@@ -512,7 +512,16 @@ end
 -- Selecao eh um estado do documento e participa do historico estrutural.
 -- Objetos complexos ficam imutaveis depois de aplicados.
 function Bridge:applySelection(selection)
-  if not self.doc or self.stroke or self.job or self.transform then return false end
+  if not self.doc then return false end
+  -- Todas as vias de alteração (Ctrl+A, ações do painel, inversão,
+  -- combinação e desmarcar) compartilham a mesma proteção.
+  -- Uma seleção pendente, prévia de PNG ou pincelada não pode criar
+  -- um snapshot estrutural concorrente e sobrescrever seu estado.
+  if self.stroke or self.job or self.transform or self.selectionDrag
+    or self.pngPreview or self.doc.history.stroke then
+    self.status='Conclua a operação atual antes de alterar a seleção'
+    return false
+  end
   if selection then Selection.validate(self.doc,selection) end
   local previous=self.doc.selection
   if previous==selection then return false end
