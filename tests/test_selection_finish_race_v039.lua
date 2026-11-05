@@ -119,7 +119,9 @@ return function(check)
 
   -- Uma varinha pertencente à ponte é outro estado transitório.
   -- Mesmo que ela seja iniciada em código externo, não consumir o arraste.
+  -- O laço anterior usava Adicionar; o novo cenário requer Substituir.
   model:set_tool('selection_rect')
+  bridge:setSelectionMode('replace')
   bridge.point=function() return 31,31 end
   check('concluir bloqueado: inicia retângulo antes de outro job',
     bridge:beginSelection(model,nil,nil,1,1024,768,50,50))
