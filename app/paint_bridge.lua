@@ -140,9 +140,15 @@ function Bridge:sync(model)
     pending=true
   end
   if pending and not fresh then
-    -- Até mudanças leves precisam aguardar: opacidade e camada ativa não
-    -- podem variar enquanto pixels parciais de um balde são calculados.
-    -- Jobs de varinha também retêm referências à camada de origem.
+    -- Alterações da UI ficam pendentes enquanto uma prévia ou seleção
+    -- em arraste utiliza a camada original; nenhuma propriedade ou
+    -- snapshot pode vazar para a operação ainda não confirmada.
+    if self.transform or self.pngPreview or self.selectionDrag then
+      self.status='Confirme ou cancele a prévia/seleção antes de alterar camadas'
+      return nil
+    end
+    -- Mesmo mudanças leves (opacidade e camada ativa) aguardam jobs
+    -- cooperativos e pinceladas externas com pixels provisórios.
     if doc.history._fillLock or (doc.history.stroke and not self.stroke)
       or self.job then
       self.status='Conclua a operação antes de alterar camadas'
@@ -288,7 +294,14 @@ end
 -- as APIs transacionais do nucleo; nunca reimplementamos rasterizacao na UI.
 function Bridge:canEditStructure(model)
   local doc=self:sync(model)
-  if not doc then self.status='Abra um documento';return nil end
+  if not doc then
+    -- sync pode recusar uma mudança pendente sem fechar o documento:
+    -- preservar a razão real do bloqueio para a interface.
+    if model.screen~='editor' or not model.document or not self.doc then
+      self.status='Abra um documento'
+    end
+    return nil
+  end
   if self.stroke or self.job or self.transform or self.selectionDrag
     or self.pngPreview or doc.history.stroke or doc.history._fillLock then
     self.status='Finalize a operação atual antes de editar camadas';return nil

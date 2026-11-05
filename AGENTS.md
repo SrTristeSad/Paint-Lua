@@ -252,3 +252,15 @@ verificar o resultado de `Bridge:sync(model)`; não ignorar um nil
 devido a operação pendente ou estado fora do editor. O controle
 de opacidade é sincronizado após o rollback sem criar undo por frame.
 Testes em `tests/test_png_export_operation_lock_v039.lua` (19).
+
+### Prévia e sincronização pendente de camadas (v0.39)
+
+`Bridge:sync` recusa qualquer mudança de camada (`pending`) em
+documento existente se `self.transform`, `self.pngPreview` ou
+`self.selectionDrag` estiverem ativos. Sem mudanças pendentes, a
+sincronização deve continuar funcionando normalmente para renderizar
+a prévia. Preservar propriedades e histórico do documento, manter
+as alterações pendentes no modelo e aplicar depois de confirmar ou
+cancelar. `Bridge:canEditStructure` não deve sobrescrever o motivo
+do bloqueio com `Abra um documento`. Testes:
+`tests/test_pending_preview_sync_v039.lua` (24 verificações).

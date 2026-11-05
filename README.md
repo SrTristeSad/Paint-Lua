@@ -400,3 +400,13 @@ um cancelamento. Com o documento liberado, a exportação aplica as
 propriedades pendentes das camadas e continua criando nomes
 incrementais sem sobrescrever PNGs existentes. Testes:
 `tests/test_png_export_operation_lock_v039.lua`.
+
+### Mudanças de camada durante prévias
+
+Uma transformação em andamento, a prévia de importação PNG e o
+arraste de seleção mantêm a camada original até o gesto ser confirmado
+ou cancelado. Alterações de nome, visibilidade, mesclagem, opacidade
+e camada ativa feitas durante a prévia ficam pendentes até a próxima
+sincronização permitida; o histórico da seleção e o histórico das
+camadas permanecem independentes. Cobertura de regressão em
+`tests/test_pending_preview_sync_v039.lua`.

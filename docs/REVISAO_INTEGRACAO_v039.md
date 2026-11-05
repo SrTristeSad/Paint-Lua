@@ -253,3 +253,26 @@ com o balde cooperativo real, pixels parciais e rollback, controle de
 opacidade pendente, pincelada externa, saída PNG real via mock de
 filesystem e rejeição de exportação quando o modelo está fora do
 editor. Não há mudança do formato PNG ou NPNT.
+
+## Prévia de transformação, PNG e arraste com alterações de camadas pendentes
+
+Um estado da interface que ainda não havia sido coberto: `Bridge:sync`
+adiava mudanças de camadas durante balde e varinha, mas permitia
+alterar o documento enquanto havia uma transformação em prévia, uma
+importação de PNG em prévia ou um retângulo/laço sendo arrastado.
+Isso podia redirecionar a camada ativa, modificar propriedades antes
+do commit do gesto e produzir uma ordem inesperada de undo/redo.
+
+Agora `sync` também adia mudanças de quantidade, nome, visibilidade,
+mesclagem, recorte, opacidade e camada ativa durante essas três
+interações. Uma sincronização sem diferenças segue normalmente, para
+não bloquear renderização da prévia. O estado pendente fica no modelo
+da interface e pode ser aplicado depois que o gesto for confirmado
+ou cancelado, em uma transação independente quando houver mudança
+estrutural. `canEditStructure` preserva a mensagem do bloqueio de
+`sync`, em vez de informar incorretamente que não há documento aberto.
+
+O teste `tests/test_pending_preview_sync_v039.lua` cobre sessões
+reais de transformação e prévia PNG, arraste de seleção, sincronização
+adiada, cancelamento e confirmação, além da ordem de undo/redo. A
+correção não acrescenta ferramentas e não modifica NPNT.
