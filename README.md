@@ -432,3 +432,14 @@ fica selecionado; se outra camada foi escolhida, a escolha é
 respeitada. O histórico mantém duas ações independentes, permitindo
 desfazer primeiro as edições do painel e depois a importação.
 Regressão: `tests/test_png_import_pending_commit_v039.lua`.
+
+### Ctrl+O durante uma edição
+
+**Ctrl+O** reabre a última versão salva da obra atual. Para não
+descartar um gesto inadvertidamente, o comando agora exige
+concluir ou cancelar seleção em arraste, transformação, prévia
+de importação PNG, pincelada, varinha ou preenchimento antes
+de reabrir o arquivo. A tentativa recusada não altera a pintura,
+o histórico ou o trabalho em andamento. Abrir outra obra
+deliberadamente pela galeria continua usando o fluxo próprio.
+Regressões: `tests/test_reload_during_operations_v039.lua`.

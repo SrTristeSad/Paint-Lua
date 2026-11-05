@@ -331,3 +331,35 @@ pendentes não cria snapshot extra. `tests/test_png_import_pending_commit_v039.l
 contém **28 verificações** para cenários normais, propriedades,
 adição de camada, IDs estáveis, isolamento de undo/redo e erro de PNG
 totalmente transparente. Os formatos PNG e NPNT permanecem intactos.
+
+## Reabertura NPNT durante gestos inacabados (v0.39)
+
+O atalho `Ctrl+O` chama `Bridge:load(model)` para reabrir a obra
+já salva. Antes, `load` decodificava o arquivo e chamava
+`attachDocument` sem verificar operações pendentes. Esse caminho
+descartava silenciosamente seleção em arraste, prévia de importação
+PNG, prévia de transformação, pinceladas e trabalhos de balde/varinha.
+Particularmente, um `Fill.newJob` criado diretamente pelo motor
+mantém `doc.history._fillLock` mesmo sem `Bridge.job`;
+reabrir durante o preenchimento substituía o documento e deixava
+pixels provisórios e o trabalho vivos no documento abandonado.
+
+`Bridge:load` agora recusa **antes de ler o disco** se houver
+`self.stroke`, `self.job`, `self.selectionDrag`,
+`self.transform`, `self.pngPreview`, `doc.history.stroke` ou
+`doc.history._fillLock`. A sessão e as pilhas de undo/redo são
+preservadas, com uma mensagem orientando concluir/cancelar. Depois
+que o trabalho terminar, Ctrl+O continua reabrindo normalmente
+o projeto NPNT ou a pintura atual da galeria.
+
+O bloqueio vale para **recarregar o arquivo atual**, não muda
+`attachDocument`: abrir deliberadamente uma obra diferente na
+galeria continua usando o fluxo que cancela operações pertencentes
+à ponte ao trocar de documento.
+
+`tests/test_reload_during_operations_v039.lua` acrescenta
+32 verificações cobrindo atalho Ctrl+O, retângulo, transformação
+real, prévia PNG, varinha, balde cooperativo externo antes/depois
+de pixels parciais, pinceladas internas/externas, rollback,
+reabertura NPNT e caminho de galeria. O projeto salvo não muda
+durante uma recusa.

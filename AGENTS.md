@@ -290,3 +290,17 @@ propriedades; manter o PNG ativo por padrão ou respeitar uma troca
 explícita da camada selecionada. A importação e as mudanças de
 camadas são ações distintas no histórico, sem snapshot extra se
 nada mudou. Testes em `tests/test_png_import_pending_commit_v039.lua`.
+
+### Reabrir arquivo atual sem abandonar jobs ativos (v0.39)
+
+`Bridge:load(model)` é acionado por Ctrl+O. Antes de decodificar
+o arquivo, recusar caso exista `self.stroke`, `self.job`,
+`self.selectionDrag`, `self.transform`, `self.pngPreview`,
+`doc.history.stroke` ou `doc.history._fillLock`. Sem isso,
+`attachDocument` substitui o documento e pode cancelar gestos
+sem confirmação, enquanto baldes externos nem são cancelados.
+Preservar estado, histórico e job ao recusar; após terminar ou
+cancelar, permitir recarga NPNT e de obra da galeria normalmente.
+Não bloquear `Bridge:attachDocument` usado intencionalmente
+para mudar de obra pela galeria.
+Teste: `tests/test_reload_during_operations_v039.lua` (32).

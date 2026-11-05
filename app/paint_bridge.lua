@@ -1318,6 +1318,16 @@ function Bridge:exportPNG(model)
 end
 
 function Bridge:load(model)
+  -- Reabrir o arquivo atual (Ctrl+O) não é uma troca deliberada de obra
+  -- pela galeria. Não descartar gestos, prévias ou jobs ainda pendentes:
+  -- especialmente baldes externos cujo token não pertence a self.job.
+  if self.stroke or self.job or self.selectionDrag
+    or self.transform or self.pngPreview or
+    (self.doc and self.doc.history and
+      (self.doc.history._fillLock or self.doc.history.stroke)) then
+    self.status='Conclua ou cancele a operação antes de reabrir a obra'
+    return nil,self.status
+  end
   local doc,err
   if self.artworkId then
     doc,err=GalleryStorage.loadArtwork(self.artworkId)
