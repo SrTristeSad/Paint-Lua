@@ -588,7 +588,8 @@ end
 -- só é registrado depois que o cálculo terminou sem erros.
 function Bridge:combineSelection(selection,mode)
   if not self.doc or self.stroke or self.job or self.transform or self.selectionDrag
-    or self.pngPreview or self.doc.history.stroke then
+    or self.pngPreview or self.doc.history.stroke or
+    self.doc.history._fillLock then
     self.status='Conclua a operação atual antes de selecionar'
     return false
   end
@@ -619,7 +620,7 @@ function Bridge:invertSelection(model)
   local doc=self:sync(model)
   if not doc then self.status='Abra um documento';return false end
   if self.stroke or self.job or self.transform or self.selectionDrag
-    or self.pngPreview or doc.history.stroke then
+    or self.pngPreview or doc.history.stroke or doc.history._fillLock then
     self.status='Conclua a operação atual antes de inverter a seleção'
     return false
   end
@@ -631,7 +632,9 @@ function Bridge:invertSelection(model)
 end
 
 function Bridge:clearSelection()
-  self.selectionDrag=nil
+  -- Ctrl+D/desmarcar não é um comando de cancelamento de arraste.
+  -- Preservar o gesto para applySelection recusar uma mudança concorrente.
+  -- Escape é o comando explícito de cancelar o arraste.
   return self:applySelection(nil)
 end
 

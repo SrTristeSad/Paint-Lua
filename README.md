@@ -410,3 +410,13 @@ e camada ativa feitas durante a prévia ficam pendentes até a próxima
 sincronização permitida; o histórico da seleção e o histórico das
 camadas permanecem independentes. Cobertura de regressão em
 `tests/test_pending_preview_sync_v039.lua`.
+
+### Desmarcar durante arraste de seleção
+
+**Ctrl+D** ou o botão **Desmarcar** não cancelam um retângulo ou laço
+enquanto ele está sendo desenhado. Conclua o gesto com o mouse ou
+cancele explicitamente com **Esc** antes de desmarcar. Isso protege a
+seleção anterior e evita gerar uma ação de desfazer indesejada.
+A inversão e a combinação de seleções também evitam cálculos
+desnecessários enquanto um balde cooperativo estiver ativo.
+Regressões: `tests/test_selection_clear_during_drag_v039.lua`.

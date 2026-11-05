@@ -276,3 +276,30 @@ O teste `tests/test_pending_preview_sync_v039.lua` cobre sessões
 reais de transformação e prévia PNG, arraste de seleção, sincronização
 adiada, cancelamento e confirmação, além da ordem de undo/redo. A
 correção não acrescenta ferramentas e não modifica NPNT.
+
+## Ctrl+D durante seleção ainda em arraste (revisão v0.39)
+
+`Bridge:clearSelection` descartava `selectionDrag` antes de chamar
+`Bridge:applySelection(nil)`. A proteção central então não via mais
+o gesto e aceitava `Desmarcar` / `Ctrl+D` no meio de um arraste,
+removendo a seleção anterior e gravando um snapshot de histórico.
+Isso contradizia o bloqueio já aplicado a Ctrl+A, Inverter e
+Combinar e podia destruir o gesto sem que o usuário o confirmasse.
+
+`clearSelection` agora encaminha a ação diretamente para
+`applySelection`, preservando o arraste ao recusar uma operação
+concorrente. A tecla Escape continua sendo o cancelamento explícito
+da seleção. Após confirmar ou cancelar o gesto, Desmarcar volta
+a funcionar normalmente e o undo/redo permanece coerente.
+
+Além disso, `invertSelection` e `combineSelection` verificam
+`doc.history._fillLock` **antes** de calcular máscaras invertidas
+ou operações booleanas: um balde cooperativo iniciado fora da
+ponte não dispara trabalho caro de seleção que acabaria rejeitado
+na última etapa.
+
+`tests/test_selection_clear_during_drag_v039.lua` acrescenta
+27 verificações com histórico real e redo pendente, botão do
+painel e atalho Ctrl+D, gesto confirmado e cancelado, seleção
+ausente, bloqueio externo e recusa precoce da rasterização.
+Nenhum formato ou ferramenta foi alterado.

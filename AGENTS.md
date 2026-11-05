@@ -264,3 +264,16 @@ as alterações pendentes no modelo e aplicar depois de confirmar ou
 cancelar. `Bridge:canEditStructure` não deve sobrescrever o motivo
 do bloqueio com `Abra um documento`. Testes:
 `tests/test_pending_preview_sync_v039.lua` (24 verificações).
+
+### Desmarcar não é cancelar o arraste (v0.39)
+
+`Bridge:clearSelection` deve chamar `applySelection(nil)`
+sem limpar `selectionDrag`. Enquanto um retângulo ou laço
+estiver em andamento, Ctrl+D e a ação do painel retornam false,
+preservam o gesto, a seleção anterior e as duas pilhas de
+histórico. Escape é o cancelamento explícito; após confirmar,
+Desmarcar volta a registrar uma ação de undo normal. Também
+recusar `invertSelection` e `combineSelection` logo no início
+quando `doc.history._fillLock` estiver ativo, antes de criar
+máscaras temporárias. Testes de regressão em
+`tests/test_selection_clear_during_drag_v039.lua` (27).
