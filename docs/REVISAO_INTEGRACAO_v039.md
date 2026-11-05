@@ -78,3 +78,18 @@ Esse gate testa **caminhos de arquivos, extração do pacote, .bat e
 presença do runtime** no Windows. Não demonstra renderização GPU,
 sensibilidade à pressão nem operação com caneta. Essas validações
 seguem pendentes para Windows de usuário final.
+
+## Testes executáveis do aplicativo no Windows
+
+O workflow passou a tentar abrir a interface no Windows real
+(Windows Server hospedado pelo GitHub, LÖVE 11.5, `lovec.exe`).
+`scripts/windows-love-e2e.ps1` usa apenas os arquivos do
+`Paint-Lua-v0.39-Windows.zip` extraído. O modo `smoke` valida
+que a inicialização da interface gerou um PNG real; o modo `bridge`
+executa os testes de integração com renderização gráfica, NPNT5,
+seleções e histórico. Os testes têm timeout e capturam logs.
+
+Essa prova exige contexto gráfico disponível no runner Windows;
+a ausência de GPU/desktop deve ser registrada como falha de ambiente,
+nunca omitida. Validação manual de tablet, pressão de caneta e
+desempenho em placas de vídeo diversas segue necessária.

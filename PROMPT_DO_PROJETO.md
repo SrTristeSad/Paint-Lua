@@ -150,3 +150,13 @@ validada. As flags de automação `PAINT_LUA_VERIFY_ONLY=1` e
 `PAINT_LUA_NO_PAUSE=1` não mudam o comportamento padrão do usuário.
 Não tratar a verificação do launcher como prova de desenho real
 no Windows ou de caneta/mesa digitalizadora.
+
+### E2E real em Windows (v0.39, após distribuição)
+
+Além do `testar.bat` e conferência de arquivos no Windows, executar
+`scripts/windows-love-e2e.ps1` contra a pasta do ZIP extraído,
+com LÖVE 11.5 `lovec.exe`. Os modos `smoke` (PNG de interface)
+e `bridge` (integração de documento e GPU) têm limite de tempo,
+captura de stdout/stderr e falha explícita ao não conseguirem abrir
+um contexto gráfico. Não alegar suporte gráfico Windows antes da CI
+desses modos passar e não extrapolar para stylus/pressão.

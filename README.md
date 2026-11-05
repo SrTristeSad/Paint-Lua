@@ -13,8 +13,16 @@ portátil oficial do LÖVE 11.5, executa `testar.bat` com
 essencial ausente. Esse modo de verificação **não abre a interface**;
 no uso normal, `testar.bat` continua a abrir o editor normalmente.
 
-A verificação automatizada do inicializador Windows **não é** uma
-validação manual de desenho, desempenho, stylus ou GPU.
+O job Windows também tenta rodar o **editor real com `lovec.exe`**,
+capturar uma imagem PNG da interface e executar os testes de integração
+NPNT, máscaras e GPU diretamente no Windows. Essa etapa é executada do
+**ZIP extraído**, sem depender de arquivos do checkout do GitHub.
+Se o runner não fornecer o contexto gráfico necessário, o teste falha
+explicitamente, em vez de declarar sucesso.
+
+Mesmo quando esses testes passam, ainda é necessária uma sessão manual
+para verificar responsividade, pressão da caneta, mesa digitalizadora
+e diferentes GPUs.
 
 ## Teste no Windows
 

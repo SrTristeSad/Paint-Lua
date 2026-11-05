@@ -1,0 +1,67 @@
+# Windows: execute the ACTUAL LÖVE editor from the extracted ZIP.
+# Intended for GitHub Actions or local diagnostics, without touching paintings.
+param(
+    [Parameter(Mandatory=$true)][string]$LoveConsole,
+    [Parameter(Mandatory=$true)][string]$ProjectDirectory,
+    [ValidateSet('smoke','bridge')][string]$Mode='smoke',
+    [ValidateRange(5,300)][int]$TimeoutSeconds=60
+)
+$ErrorActionPreference='Stop'
+$exe=(Resolve-Path -LiteralPath $LoveConsole).Path
+$root=(Resolve-Path -LiteralPath $ProjectDirectory).Path
+if (-not (Test-Path (Join-Path $root 'main.lua'))) {
+    throw "main.lua ausente no pacote: $root"
+}
+if ([IO.Path]::GetFileName($exe).ToLowerInvariant() -ne 'lovec.exe') {
+    throw 'O teste automatizado exige lovec.exe (runtime console)'
+}
+$env:PAINT_LUA_SMOKE=$null
+$env:PAINT_LUA_BRIDGE_E2E=$null
+$env:PAINT_LUA_SCREEN=$null
+if ($Mode -eq 'smoke') {
+    $env:PAINT_LUA_SMOKE='1'
+    $env:PAINT_LUA_SCREEN='editor'
+} else {
+    $env:PAINT_LUA_BRIDGE_E2E='1'
+}
+$stdout=Join-Path $env:RUNNER_TEMP ("paint-lua-$Mode.stdout.txt")
+$stderr=Join-Path $env:RUNNER_TEMP ("paint-lua-$Mode.stderr.txt")
+Remove-Item $stdout,$stderr -Force -ErrorAction SilentlyContinue
+Write-Output "LÖVE 11.5 no Windows: iniciando teste $Mode do pacote..."
+$proc=Start-Process -FilePath $exe -ArgumentList '.' -WorkingDirectory $root `
+    -PassThru -RedirectStandardOutput $stdout -RedirectStandardError $stderr
+try {
+    if (-not $proc.WaitForExit($TimeoutSeconds*1000)) {
+        Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
+        throw "LÖVE Windows: timeout no teste $Mode após $TimeoutSeconds segundos"
+    }
+    $proc.WaitForExit()
+    $output=if (Test-Path $stdout) { Get-Content $stdout -Raw } else { '' }
+    $errors=if (Test-Path $stderr) { Get-Content $stderr -Raw } else { '' }
+    if ($output) { Write-Output $output }
+    if ($errors) { Write-Output "LÖVE stderr: $errors" }
+    if ($proc.ExitCode -ne 0) { throw "LÖVE Windows $Mode falhou: exit $($proc.ExitCode)" }
+    if ($Mode -eq 'bridge') {
+        if (-not $output.Contains('PASS: L')) {
+            throw "LÖVE Windows $Mode encerrou sem emitir provas PASS da suite real"
+        }
+    } else {
+        $shot=Join-Path $env:APPDATA 'LOVE\paint-lua\ci-smoke.png'
+        if (-not (Test-Path -LiteralPath $shot)) {
+            throw "LÖVE Windows inicializou, mas não gerou screenshot: $shot"
+        }
+        $bytes=[IO.File]::ReadAllBytes($shot)
+        if ($bytes.Length -lt 1000 -or
+            -not ($bytes[0] -eq 137 -and $bytes[1] -eq 80 -and
+                  $bytes[2] -eq 78 -and $bytes[3] -eq 71)) {
+            throw "LÖVE Windows gerou imagem inválida de screenshot"
+        }
+        Write-Output "PASS: editor Windows desenhou a interface e gravou screenshot PNG ($($bytes.Length) bytes)"
+        Remove-Item -LiteralPath $shot -Force
+    }
+    Write-Output "PASS: LÖVE Windows $Mode — processo concluído sem erro"
+} finally {
+    $env:PAINT_LUA_SMOKE=$null
+    $env:PAINT_LUA_BRIDGE_E2E=$null
+    $env:PAINT_LUA_SCREEN=$null
+}

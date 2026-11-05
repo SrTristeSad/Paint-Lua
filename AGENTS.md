@@ -160,3 +160,16 @@ Testar também a falha com `app/selection_ants.lua` ausente (exit 5).
 Não chamar esse gate "teste manual Windows/GPU", pois só cobre
 distribuição/launcher. As configurações de console/título no `conf.lua`
 foram sincronizadas com v0.39.
+
+### E2E Windows do aplicativo real (v0.39)
+
+`scripts/windows-love-e2e.ps1` é executado **a partir do ZIP descompactado**
+com `lovec.exe` oficial (verificado por SHA-256 no job Windows).
+Modo `smoke`: `PAINT_LUA_SMOKE=1 PAINT_LUA_SCREEN=editor` e
+verificação de PNG gerado pelo LÖVE em `%APPDATA%/LOVE/paint-lua`.
+Modo `bridge`: `PAINT_LUA_BRIDGE_E2E=1`, verificando a suíte real e
+sinais PASS no stdout. Os dois processos têm timeout e expõem logs
+na falha; o runner gráfico Windows pode não suportar OpenGL nessa
+sessão. Não mascarar problemas de GPU como sucesso; manter os
+testes Linux e o gate de ZIP existentes. Ainda não substitui
+validação manual de caneta e performance.

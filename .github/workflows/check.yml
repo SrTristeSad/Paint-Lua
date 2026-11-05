@@ -128,6 +128,7 @@ jobs:
           unzip -Z1 Paint-Lua-v0.39-Windows.zip | grep -q '^app/selection_ants.lua$'
           unzip -Z1 Paint-Lua-v0.39-Windows.zip | grep -q '^docs/REVISAO_INTEGRACAO_v039.md$'
           unzip -Z1 Paint-Lua-v0.39-Windows.zip | grep -q '^testar.bat$'
+          unzip -Z1 Paint-Lua-v0.39-Windows.zip | grep -q '^scripts/windows-love-e2e.ps1$'
           sha256sum Paint-Lua-v0.39-Windows.zip
       - name: Disponibilizar ZIP
         uses: actions/upload-artifact@v4
@@ -176,6 +177,7 @@ jobs:
           if (-not $console) { throw 'lovec.exe ausente no runtime oficial' }
           & $console.FullName --version
           if ($LASTEXITCODE -ne 0) { throw "lovec.exe --version falhou: $LASTEXITCODE" }
+          "LOVEC11_EXE=$($console.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
       - name: Extrair pacote entregue e executar testar.bat no Windows
         shell: pwsh
         run: |
@@ -229,4 +231,16 @@ jobs:
             }
           }
           Write-Output 'PASS: ZIP Windows extraído, LOVE 11.5 validado, testar.bat e falha controlada'
+      - name: Inicialização real da interface no LÖVE 11.5 Windows
+        shell: pwsh
+        run: |
+          & ./win-release/scripts/windows-love-e2e.ps1 `
+            -LoveConsole $env:LOVEC11_EXE -ProjectDirectory './win-release' `
+            -Mode smoke -TimeoutSeconds 75
+      - name: Integração real NPNT, seleção e GPU no LÖVE 11.5 Windows
+        shell: pwsh
+        run: |
+          & ./win-release/scripts/windows-love-e2e.ps1 `
+            -LoveConsole $env:LOVEC11_EXE -ProjectDirectory './win-release' `
+            -Mode bridge -TimeoutSeconds 120
 
