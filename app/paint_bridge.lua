@@ -108,6 +108,9 @@ function Bridge:sync(model)
   local nextLayers,nextMap={},{}
   local selected=1
   local changed = #doc.layers~=#model.layers
+  -- Opacidade e camada ativa são mudanças leves (sem snapshot por frame),
+  -- mas também precisam aguardar o fim de um preenchimento cooperativo.
+  local pending=changed
   for i,entry in ipairs(model.layers) do
     local layer=self.byId[entry.id]
     if not layer then
@@ -119,30 +122,35 @@ function Bridge:sync(model)
     end
     nextLayers[i]=layer
     nextMap[entry.id]=layer
-    self.uiByLayer[layer]=entry
+    if layer.opacity~=clamp(entry.opacity or 100,0,100) then pending=true end
     if doc.layers[i]~=layer or layer.name~=entry.name
       or layer.visible~=(entry.visible~=false)
       or layer.blend~=(blends[entry.blending] or 'normal')
       or (layer.clipped or false)~=(entry.clipping==true) then
       changed=true
+      pending=true
     end
     if entry.id==model.active_layer_id then selected=i end
   end
+  if doc.sel~=selected then pending=true end
   if #nextLayers==0 then
     -- Estado defensivo: o motor exige pelo menos uma camada editável.
     nextLayers[1]=Doc.newLayer('Camada 1')
     changed=true
+    pending=true
   end
-  if changed and not fresh then
-    -- O preenchimento cooperativo pode manter o histórico bloqueado
-    -- mesmo sem um job pertencente a esta instância da ponte.
-    -- Adiar propriedades da UI evita snapshots durante pixels parciais.
-    if doc.history._fillLock or (doc.history.stroke and not self.stroke) then
-      self.status='Conclua o preenchimento antes de alterar camadas'
+  if pending and not fresh then
+    -- Até mudanças leves precisam aguardar: opacidade e camada ativa não
+    -- podem variar enquanto pixels parciais de um balde são calculados.
+    -- Jobs de varinha também retêm referências à camada de origem.
+    if doc.history._fillLock or (doc.history.stroke and not self.stroke)
+      or self.job then
+      self.status='Conclua a operação antes de alterar camadas'
       return nil
     end
+  end
+  if changed and not fresh then
     self:finish(false)
-    if self.job then return nil end -- propriedades mudam após finalizar o job
     History.recordStructure(doc)
   end
   doc.layers=nextLayers
@@ -150,6 +158,7 @@ function Bridge:sync(model)
   self.byId=nextMap
   for i,entry in ipairs(model.layers) do
     local layer=doc.layers[i]
+    self.uiByLayer[layer]=entry
     layer.name=entry.name
     layer.visible=entry.visible~=false
     layer.opacity=clamp(entry.opacity or 100,0,100)

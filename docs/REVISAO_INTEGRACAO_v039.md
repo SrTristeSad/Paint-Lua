@@ -202,3 +202,29 @@ real, cancelamento de preenchimento cooperativo parcial, isolamento de
 camadas e históricos, limpeza do cache incremental, modo de seleção
 reiniciado, primeiro gesto e undo/redo na nova obra, além de nova
 tela criada depois. Não há mudança no formato NPNT ou nos arquivos.
+
+## Sincronização de opacidade e camada ativa durante jobs (v0.39)
+
+Foi encontrada uma omissão no bloqueio de `Bridge:sync`: o caminho
+anterior verificava somente alterações estruturais (nome, visibilidade,
+modo de mesclagem, recorte, ordem e quantidade de camadas). Entretanto,
+alterar **somente a opacidade** ou **somente a camada ativa** contornava
+a condição de bloqueio e modificava o documento durante um balde
+cooperativo, inclusive com pixels parciais e o token
+`doc.history._fillLock` em uso. O mesmo era possível durante um job
+de varinha iniciado pela ponte.
+
+A sincronização agora distingue `changed` (mudanças que precisam de
+snapshot estrutural) de `pending` (qualquer mudança de propriedade,
+inclusive opacidade e índice da camada ativa). Enquanto houver lock
+de preenchimento, gesto transacional externo ou job da ponte,
+`pending` é adiado sem tocar no documento ou gravar undo/redo.
+`uiByLayer` também só é atualizado depois que o bloqueio termina.
+Assim, nenhuma referência de camada é trocada sob um job em andamento.
+
+A regra já estabelecida foi preservada: movimentos do controle de
+opacidade e mudanças da camada ativa **não criam snapshots a cada
+frame**. Renomear uma camada continua criando exatamente um snapshot.
+`tests/test_layer_sync_during_jobs_v039.lua` cobre o trabalho real
+do balde antes e depois de produzir pixels, cancelamento com rollback,
+a varinha, propriedades pendentes e histórico após liberar o job.

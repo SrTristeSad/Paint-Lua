@@ -379,3 +379,13 @@ em **Substituir**, sem herdar acidentalmente o modo Subtrair/Interseção
 da pintura anterior. Um preenchimento ainda ativo é cancelado com
 rollback antes da troca. Regressões em
 `tests/test_document_switch_v039.lua`.
+
+### Propriedades de camadas durante uma operação
+
+Enquanto o balde cooperativo ou a varinha mágica estão calculando uma
+região, o editor **adia alterações de opacidade e troca da camada
+ativa** até concluir ou cancelar a operação. Isso evita modificar
+a camada usada por um trabalho ainda em andamento. O controle de
+opacidade mantém seu comportamento anterior, sem criar uma ação de
+desfazer para cada atualização; a regressão está em
+`tests/test_layer_sync_during_jobs_v039.lua`.

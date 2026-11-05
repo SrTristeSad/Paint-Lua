@@ -228,3 +228,15 @@ o cálculo de contornos retém máscara e tiles do documento anterior.
 `tests/test_document_switch_v039.lua` valida caches, cancelamento
 de balde com rollback, um arquivo NPNT reaberto, início da seleção,
 undo/redo e criação de tela seguinte. Não alterar o projeto salvo.
+
+### Bloqueio completo de sync durante jobs (v0.39)
+
+Em `Bridge:sync`, não tratar apenas `changed` (alterações de camada
+que exigem `History.recordStructure`): também detectar `pending`
+(opacidade e índice ativo, além das alterações estruturais). Com
+`history._fillLock`, `history.stroke` externo ou `self.job`,
+não modificar `doc.sel`, `layer.opacity` nem `uiByLayer`;
+retornar nil e preservar as mudanças no modelo para aplicação
+posterior. Opacidade continua sem histórico por frame; snapshot só
+para alterações estruturais. Testes em
+`tests/test_layer_sync_during_jobs_v039.lua`.

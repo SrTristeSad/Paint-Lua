@@ -1871,6 +1871,7 @@ require('tests.test_selection_operation_lock_v039')(check)
 require('tests.test_selection_fill_lock_v039')(check)
 require('tests.test_selection_lifecycle_v039')(check)
 require('tests.test_document_switch_v039')(check)
+require('tests.test_layer_sync_during_jobs_v039')(check)
 
 print(string.format("\n%d passou, %d falhou", passed, failed))
 if failed > 0 then os.exit(1) end
