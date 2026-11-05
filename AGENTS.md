@@ -163,13 +163,16 @@ foram sincronizadas com v0.39.
 
 ### E2E Windows do aplicativo real (v0.39)
 
-`scripts/windows-love-e2e.ps1` é executado **a partir do ZIP descompactado**
-com `lovec.exe` oficial (verificado por SHA-256 no job Windows).
-Modo `smoke`: `PAINT_LUA_SMOKE=1 PAINT_LUA_SCREEN=editor` e
-verificação de PNG gerado pelo LÖVE em `%APPDATA%/LOVE/paint-lua`.
-Modo `bridge`: `PAINT_LUA_BRIDGE_E2E=1`, verificando a suíte real e
-sinais PASS no stdout. Os dois processos têm timeout e expõem logs
-na falha; o runner gráfico Windows pode não suportar OpenGL nessa
-sessão. Não mascarar problemas de GPU como sucesso; manter os
-testes Linux e o gate de ZIP existentes. Ainda não substitui
-validação manual de caneta e performance.
+`scripts/windows-love-e2e.ps1` é executado do ZIP descompactado com
+`lovec.exe` oficial, verificado por SHA-256. Os modos `smoke` e `bridge`
+exigem respectivamente captura PNG real da interface e testes do motor
+com LÖVE real. Ambos têm timeout e imprimem stdout/stderr na falha.
+
+O runner hospedado Windows Server 2025 foi identificado com OpenGL 1.1
+GDI Generic, incompatível com o mínimo OpenGL 2.1 exigido pelo LÖVE.
+Somente quando a saída comprovar **exatamente esse erro**, a flag
+`-AllowMissingGraphics` pode declarar **SKIP com warning** e registrar
+`PAINT_LUA_GRAPHICS_UNAVAILABLE=1` para não repetir a tentativa GPU.
+Outros problemas continuam falhando a CI. Não confundir skip com teste
+gráfico Windows aprovado, nem com teste manual de caneta/performance.
+Em Windows de usuário final, rodar sem essa flag para verificação estrita.

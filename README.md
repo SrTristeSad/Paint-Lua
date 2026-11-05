@@ -17,12 +17,17 @@ O job Windows também tenta rodar o **editor real com `lovec.exe`**,
 capturar uma imagem PNG da interface e executar os testes de integração
 NPNT, máscaras e GPU diretamente no Windows. Essa etapa é executada do
 **ZIP extraído**, sem depender de arquivos do checkout do GitHub.
-Se o runner não fornecer o contexto gráfico necessário, o teste falha
-explicitamente, em vez de declarar sucesso.
+O runner Windows do GitHub ofereceu apenas **OpenGL 1.1 (GDI Generic)**,
+abaixo do requisito do LÖVE 11.5 (**OpenGL 2.1 ou OpenGL ES 2**).
+A CI emite um **aviso de teste gráfico não executado**, mantendo a
+validação do pacote e do inicializador. Essa dispensa é permitida
+**somente** quando o próprio LÖVE diagnostica esse driver incompatível;
+erros de aplicação, falhas inesperadas e timeouts continuam reprovando.
 
-Mesmo quando esses testes passam, ainda é necessária uma sessão manual
-para verificar responsividade, pressão da caneta, mesa digitalizadora
-e diferentes GPUs.
+Em um Windows com GPU compatível, o script
+`scripts/windows-love-e2e.ps1` exige a inicialização, a captura PNG
+e os testes de integração. Uma sessão manual ainda é necessária para
+testar canetas, mesas digitalizadoras e desempenho em outras GPUs.
 
 ## Teste no Windows
 

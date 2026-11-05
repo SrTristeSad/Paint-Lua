@@ -236,8 +236,9 @@ jobs:
         run: |
           & ./win-release/scripts/windows-love-e2e.ps1 `
             -LoveConsole $env:LOVEC11_EXE -ProjectDirectory './win-release' `
-            -Mode smoke -TimeoutSeconds 35
+            -Mode smoke -TimeoutSeconds 35 -AllowMissingGraphics
       - name: Integração real NPNT, seleção e GPU no LÖVE 11.5 Windows
+        if: env.PAINT_LUA_GRAPHICS_UNAVAILABLE != '1'
         shell: pwsh
         run: |
           & ./win-release/scripts/windows-love-e2e.ps1 `

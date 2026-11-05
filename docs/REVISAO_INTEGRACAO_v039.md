@@ -89,7 +89,25 @@ que a inicialização da interface gerou um PNG real; o modo `bridge`
 executa os testes de integração com renderização gráfica, NPNT5,
 seleções e histórico. Os testes têm timeout e capturam logs.
 
-Essa prova exige contexto gráfico disponível no runner Windows;
-a ausência de GPU/desktop deve ser registrada como falha de ambiente,
-nunca omitida. Validação manual de tablet, pressão de caneta e
-desempenho em placas de vídeo diversas segue necessária.
+O Windows Server 2025 hospedado pelo GitHub forneceu **OpenGL 1.1
+GDI Generic**, incompatível com o mínimo **OpenGL 2.1** do LÖVE.
+O modo de CI `-AllowMissingGraphics` emite uma advertência
+**SKIP: GPU insuficiente**, registrada no sumário do job, somente
+quando esse erro for identificado na saída do runtime. A verificação
+do ZIP e do inicializador continua obrigatória; outras falhas ou
+timeouts continuam fatais. O `bridge` é dispensado somente se o
+`smoke` comprovou essa limitação. O resultado não é teste gráfico
+Windows aprovado.
+
+O teste pode ser executado em um Windows com driver gráfico adequado,
+após extrair o ZIP e informar onde está o `lovec.exe` do LÖVE 11.5:
+
+```powershell
+./scripts/windows-love-e2e.ps1 -LoveConsole "C:\LOVE\lovec.exe" -ProjectDirectory "." -Mode smoke
+./scripts/windows-love-e2e.ps1 -LoveConsole "C:\LOVE\lovec.exe" -ProjectDirectory "." -Mode bridge
+```
+
+O caminho acima é apenas um exemplo; utilize o caminho real do seu
+runtime. Executar **sem** `-AllowMissingGraphics` mantém a validação
+estrita. Testes manuais com caneta, pressão e performance permanecem
+pendentes.

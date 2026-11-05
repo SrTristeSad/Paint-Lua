@@ -156,7 +156,11 @@ no Windows ou de caneta/mesa digitalizadora.
 Além do `testar.bat` e conferência de arquivos no Windows, executar
 `scripts/windows-love-e2e.ps1` contra a pasta do ZIP extraído,
 com LÖVE 11.5 `lovec.exe`. Os modos `smoke` (PNG de interface)
-e `bridge` (integração de documento e GPU) têm limite de tempo,
-captura de stdout/stderr e falha explícita ao não conseguirem abrir
-um contexto gráfico. Não alegar suporte gráfico Windows antes da CI
-desses modos passar e não extrapolar para stylus/pressão.
+e `bridge` (integração de documento e GPU) têm timeout
+e captura de stdout/stderr. O runner GitHub Windows hospedado revelou
+OpenGL 1.1, abaixo do mínimo do LÖVE: a CI permite **skip com
+aviso explícito** apenas com `-AllowMissingGraphics` e assinatura de
+erro confirmada pelo motor. Demais falhas e timeouts continuam fatais.
+No Windows do usuário, o teste permanece estrito (sem essa flag).
+Não alegar renderização Windows confirmada antes dos modos passarem,
+nem confundir isso com teste de stylus/pressão.
