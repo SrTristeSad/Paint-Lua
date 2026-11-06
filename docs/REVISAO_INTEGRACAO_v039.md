@@ -554,3 +554,25 @@ antes. Não há mudança em NPNT1–NPNT5 nem na política da galeria
 para operações pertencentes à ponte. Regressão:
 `tests/test_external_transaction_document_switch_v039.lua`,
 executada na suíte principal.
+
+## Compatibilidade de compilação com LuaJIT no Windows (PR #6)
+
+Um teste real em Windows identificou um erro bloqueador na inicialização:
+`app/ibis_main.lua:2496: function at line 1462 has more than 60 upvalues`.
+O compilador Lua 5.4 usado na verificação de sintaxe da CI não impõe
+o limite de 60 upvalues por função do LuaJIT utilizado pelo LÖVE 11.5.
+Por isso o arquivo era empacotado e os testes automatizados passavam,
+mas a interface não conseguia carregar no ambiente do usuário.
+
+A função `draw_editor_panel` foi dividida sem alterar o desenho
+nem as ações de interface: o conteúdo do painel de cores agora está
+em `draw_color_panel(x,y,w,h)`, com escopo de upvalues próprio. A
+CI foi reforçada com compilação de `main.lua` e dos arquivos Lua de
+produção (`core/`, `app/`, `src/`) via `luajit -b`, além da
+validação anterior por `luac5.4`. O gate deve falhar antes do
+empacotamento se reaparecer esse erro de inicialização.
+
+A correção requer validação no Windows real pelo usuário, que foi
+quem detectou a incompatibilidade. A CI Windows ainda não executa
+renderização GPU com OpenGL compatível; seu resultado não deve ser
+interpretado como teste gráfico aprovado.
