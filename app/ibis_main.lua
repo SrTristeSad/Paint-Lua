@@ -41,6 +41,10 @@ local color_palette_page=0
 local color_swatch_drag=nil
 local settings_e2e=os.getenv("PAINT_LUA_SETTINGS_E2E")=="1"
 local settings_e2e_stage=0
+local selection_pause_e2e=os.getenv("PAINT_LUA_SELECTION_PAUSE_E2E")
+local selection_pause_stage=0
+local preferences_file=selection_pause_e2e and "ci-v039-editor-preferences.txt"
+    or "editor-preferences.txt"
 local gallery_selecting=false
 local gallery_dialog=nil
 local gallery_input=""
@@ -99,6 +103,7 @@ local gallery_persist_stage=0
 -- Autotestes/capturas não devem criar dados persistentes por acidente.
 local persistence_enabled=not (smoke or e2e or layer_e2e or
     settings_e2e or gallery_e2e or color_e2e or png_filter_e2e or transform_filter_e2e or
+    selection_pause_e2e or
     transform_handles_e2e or selection_combine_e2e or selection_outline_e2e or
     os.getenv('PAINT_LUA_BRIDGE_E2E')=='1' or
     os.getenv('PAINT_LUA_GALLERY_STORAGE_E2E')=='1')
@@ -240,8 +245,7 @@ local function build_next_gallery_thumbnail()
 end
 local function save_current_artwork()
     if not persistence_enabled or not active_artwork_id then return true end
-    paint:sync(state)
-    local ok,err=paint:save()
+    local ok,err=paint:save(state)
     if not ok then
         notice('Falha ao salvar a obra: '..tostring(err))
         return nil,err
@@ -276,7 +280,7 @@ local function save_preferences()
     -- Screenshot and interaction tests start with deterministic defaults.
     if smoke or e2e or settings_e2e or gallery_e2e then return end
     local ok,reason=love.filesystem.write(
-        "editor-preferences.txt",preferences:encode())
+        preferences_file,preferences:encode())
     if not ok then notice("Settings could not be saved: "..tostring(reason)) end
 end
 local function current()
@@ -805,7 +809,7 @@ local function finish_new_canvas(wi,he)
     if persistence_enabled then
         paint:sync(state)
         paint:setArtwork(active_artwork_id)
-        local ok,err=paint:save()
+        local ok,err=paint:save(state)
         if not ok then notice('Obra criada, mas não salva: '..tostring(err))
         else
             forget_gallery_thumbnail(active_artwork_id)
@@ -1455,6 +1459,328 @@ local function draw_panel_box(x,y,w,h,title)
         panel=nil;state.active_panel=nil
     end)
 end
+-- O painel de cor tem seu próprio escopo para respeitar o limite
+-- de 60 upvalues por função do LuaJIT embutido no LÖVE 11.5.
+local function draw_color_panel(x,y,w,h)
+        local function apply_color()
+            state:set_color(colors.current[1],colors.current[2],colors.current[3])
+            local hue=colors:hsb()
+            picker_hue=(hue%360)/360
+            palette_index=0
+        end
+        local function from_pointer(mx,my,wheel_x,wheel_y,radius)
+            local dx,dy=mx-wheel_x,my-wheel_y
+            local distance=math.sqrt(dx*dx+dy*dy)
+            local h,s,b=colors:hsb()
+            if distance>=radius-23 then
+                local a
+                if math.atan2 then a=math.atan2(dy,dx)
+                elseif dx~=0 then
+                    a=math.atan(dy/dx)
+                    if dx<0 then a=a+math.pi end
+                else a=dy>=0 and math.pi/2 or -math.pi/2 end
+                h=(((a+math.pi/2)/(2*math.pi))%1)*360
+            else
+                local radius_inner=radius-23
+                local u=(dx+dy)/(2*radius_inner)+0.5
+                local v=(dy-dx)/(2*radius_inner)+0.5
+                s=math.max(0,math.min(1,u))*100
+                b=(1-math.max(0,math.min(1,v)))*100
+            end
+            colors:set_hsb(h,s,b)
+            apply_color()
+        end
+        -- Header controls (a floating Color Window was introduced in v14).
+        hit(x+5,y+2,w-176,31,function()
+            if color_float then
+                local mx,my=pointer()
+                color_drag={dx=mx-x,dy=my-y}
+            end
+        end,"color_move_bar")
+        rectangle(x+w-172,y+4,127,28,
+            color_float and C.blue or C.deep,0.93,2)
+        label(color_float and "Dock Color" or "Floating Window",
+            x+w-170,y+12,123,"tiny","center",C.white)
+        hit(x+w-172,y+4,127,28,function()
+            color_float=not color_float
+            color_position=nil
+        end,"color_float_toggle")
+        -- Current / previous colors are explicit in the official Color window.
+        local current=colors.current
+        local prev=colors.previous
+        rectangle(x+16,y+47,68,43,
+            {current[1]/255,current[2]/255,current[3]/255},1,3)
+        stroke(x+16,y+47,68,43,C.white,0.68)
+        rectangle(x+91,y+47,68,43,{prev[1]/255,prev[2]/255,prev[3]/255},1,3)
+        stroke(x+91,y+47,68,43,C.white,0.68)
+        label("Current",x+16,y+92,68,"tiny","center",C.white)
+        label("Previous",x+91,y+92,68,"tiny","center",C.white)
+        hit(x+91,y+47,68,43,function()
+            colors:set_rgb(prev[1],prev[2],prev[3]);apply_color()
+        end,"color_previous")
+        rectangle(x+183,y+51,w-200,34,C.deep,0.92,3)
+        label(colors:hex(),x+192,y+61,w-218,"normal","center",C.white)
+        hit(x+183,y+51,w-200,34,function()
+            color_dialog="hex"
+            color_input=colors:hex()
+            color_input_replace=true
+        end,"color_hex")
+        -- Toggle HSB/Palette and HSB/RGB separately.
+        local tab_y=y+119
+        local half=(w-32)/2
+        for i,item in ipairs({
+            {"HSB",false},{"Palette",true}
+        }) do
+            local xx=x+16+(i-1)*half
+            local selected=colors.palette_mode==item[2]
+            rectangle(xx,tab_y,half-3,33,
+                selected and C.blue or C.deep,0.89,2)
+            label(item[1],xx+4,tab_y+9,half-11,
+                "small","center",C.white)
+            local desired=item[2]
+            hit(xx,tab_y,half-3,33,function()
+                colors.palette_mode=desired
+            end,"color_mode_"..item[1]:lower())
+        end
+        if not colors.palette_mode then
+            local wheel_x=x+127
+            local wheel_y=y+265
+            local radius=104
+            draw_hue_wheel(wheel_x,wheel_y,radius)
+            local _,saturation,brightness=colors:hsb()
+            local diamond_r=radius-23
+            local u=saturation/100
+            local v=1-brightness/100
+            local pick_x=wheel_x+(u-v)*diamond_r
+            local pick_y=wheel_y+(u+v-1)*diamond_r
+            rgba(C.deep)
+            love.graphics.setLineWidth(3)
+            love.graphics.circle("line",pick_x,pick_y,7)
+            rgba(C.white)
+            love.graphics.setLineWidth(1.8)
+            love.graphics.circle("line",pick_x,pick_y,7)
+            hit(wheel_x-radius,wheel_y-radius,radius*2,radius*2,function()
+                local mx,my=pointer()
+                from_pointer(mx,my,wheel_x,wheel_y,radius)
+                color_wheel_drag={
+                    x=wheel_x,y=wheel_y,r=radius,
+                    action=from_pointer,apply=apply_color
+                }
+            end,"color_wheel")
+            local sx=x+264
+            local track_w=math.max(60,w-306)
+            local hue,saturation,brightness=colors:hsb()
+            local channels=colors.rgb_mode and {
+                {"R",current[1],255},{"G",current[2],255},
+                {"B",current[3],255},{"Opacity",colors.opacity,100}
+            } or {
+                {"H",math.floor(hue+0.5),360},
+                {"S",math.floor(saturation+0.5),100},
+                {"B",math.floor(brightness+0.5),100},
+                {"Opacity",colors.opacity,100}
+            }
+            for index,entry in ipairs(channels) do
+                local yy=y+169+(index-1)*69
+                label(entry[1],sx,yy,track_w*0.55,"small","left",C.white)
+                label(tostring(entry[2])..(index==4 and "%" or ""),
+                    sx+track_w*0.53,yy,track_w*0.47,
+                    "small","right",C.white)
+                rectangle(sx,yy+27,track_w,5,C.soft,0.62,2)
+                local frac=entry[2]/entry[3]
+                rectangle(sx,yy+27,track_w*frac,5,C.blue,1,2)
+                rgba(C.white)
+                love.graphics.circle("fill",sx+track_w*frac,yy+29,7)
+                local mode=colors.rgb_mode and "RGB" or "HSB"
+                local number=index
+                local function set_fraction(fr)
+                    fr=math.max(0,math.min(1,fr))
+                    if number==4 then colors:set_opacity(fr*100)
+                    elseif mode=="RGB" then
+                        colors:set_rgb_channel(number,math.floor(fr*255+0.5))
+                        apply_color()
+                    else
+                        local hue,sat,bright=colors:hsb()
+                        if number==1 then hue=fr*360
+                        elseif number==2 then sat=fr*100
+                        else bright=fr*100 end
+                        colors:set_hsb(hue,sat,bright)
+                        apply_color()
+                    end
+                end
+                hit(sx,yy+15,track_w,31,function()
+                    local mx=pointer()
+                    set_fraction((mx-sx)/track_w)
+                    color_slider_drag={x=sx,w=track_w,change=set_fraction}
+                end,"color_slider_"..(colors.rgb_mode and
+                    ({"r","g","b","opacity"})[index] or
+                    ({"h","s","b","opacity"})[index]))
+            end
+            rectangle(sx,y+448,track_w,32,C.deep,0.86,3)
+            label(colors.rgb_mode and "RGB → HSB" or "HSB → RGB",
+                sx+3,y+456,track_w-6,"small","center",C.white)
+            hit(sx,y+448,track_w,32,function()
+                colors:toggle_rgb_mode()
+            end,"color_rgb_toggle")
+            label("Color preview only — no painting engine",
+                x+12,y+h-56,w-24,"tiny","center",C.soft)
+        else
+            local active=colors.palettes[colors.active_palette]
+            label("Color Palettes",x+20,y+167,w-40,"small","left",C.white)
+            local pal_x=x+17
+            local pal_list=colors:palettes_list()
+            local max_page=math.max(0,math.floor((#pal_list-1)/3))
+            color_palette_page=math.max(0,
+                math.min(max_page,color_palette_page))
+            local tab_w=math.max(50,math.min(132,(w-113)/3))
+            for j=1,3 do
+                local i=color_palette_page*3+j
+                local item=pal_list[i]
+                if item then
+                    local px=pal_x+(j-1)*(tab_w+2)
+                    rectangle(px,y+190,tab_w,30,
+                        colors.active_palette==i and C.blue or C.deep,
+                        0.91,3)
+                    label(item.name,px+3,y+200,tab_w-6,"small","center",C.white)
+                    local id=i
+                    hit(px,y+190,tab_w,30,function()
+                        colors:choose_palette(id)
+                    end,"color_palette_"..i)
+                end
+            end
+            local prev_x=x+w-70
+            local next_x=x+w-37
+            rectangle(prev_x,y+191,30,27,C.deep,
+                color_palette_page>0 and 0.94 or 0.46,2)
+            rectangle(next_x,y+191,30,27,C.deep,
+                color_palette_page<max_page and 0.94 or 0.46,2)
+            label("<",prev_x,y+197,30,"small","center",C.white)
+            label(">",next_x,y+197,30,"small","center",C.white)
+            if color_palette_page>0 then
+                hit(prev_x,y+191,30,27,function()
+                    color_palette_page=color_palette_page-1
+                end,"color_palette_prev")
+            end
+            if color_palette_page<max_page then
+                hit(next_x,y+191,30,27,function()
+                    color_palette_page=color_palette_page+1
+                end,"color_palette_next")
+            end
+            local current_name=active.name
+            label(current_name.." ("..#active.colors..")",
+                x+17,y+233,w-34,"normal","left",C.white)
+            local menu_y=y+259
+            local bw=(w-43)/3
+            for i,item in ipairs({
+                {"New",function()
+                    color_dialog="new_palette"
+                    color_input="New Palette"
+                    color_input_replace=true
+                end,"color_new_palette"},
+                {"Rename",function()
+                    color_dialog="rename_palette"
+                    color_input=active.name
+                    color_input_replace=true
+                end,"color_rename_palette"},
+                {"+ Color",function()
+                    colors:add_current()
+                end,"color_add_swatch"}
+            }) do
+                local px=x+17+(i-1)*(bw+4)
+                rectangle(px,menu_y,bw,36,C.deep,0.94,2)
+                label(item[1],px+2,menu_y+11,bw-4,
+                    "small","center",C.white)
+                hit(px,menu_y,bw,36,item[2],item[3])
+            end
+            local swatches=colors:colors()
+            local swatch_size=32
+            local swatch_gap=6
+            local columns=math.max(1,math.floor((w-42)/(swatch_size+swatch_gap)))
+            local max_slots=math.max(1,math.floor((h-415)/40)*columns)
+            for i=1,math.min(#swatches,max_slots) do
+                local col=(i-1)%columns
+                local row=math.floor((i-1)/columns)
+                local px=x+17+col*(swatch_size+swatch_gap)
+                local py=y+310+row*40
+                local c=swatches[i]
+                rectangle(px,py,swatch_size,swatch_size,
+                    {c[1]/255,c[2]/255,c[3]/255},1,2)
+                stroke(px,py,swatch_size,swatch_size,C.white,0.42)
+                local id=i
+                hit(px,py,swatch_size,swatch_size,function()
+                    colors:select_color(id);apply_color()
+                    color_swatch_drag={
+                        from=id,initial_x=px+swatch_size/2,
+                        initial_y=py+swatch_size/2,
+                        grid_x=x+17,grid_y=y+310,
+                        step=swatch_size+swatch_gap,
+                        columns=columns
+                    }
+                end,"color_swatch_"..i)
+            end
+            local recent=colors:history_list()
+            local foot=y+h-100
+            label("Color History — selected colors",
+                x+16,foot,w-32,"small","left",C.white)
+            for i=1,math.min(#recent,11) do
+                local c=recent[i]
+                local xx=x+16+(i-1)*37
+                rectangle(xx,foot+25,30,30,
+                    {c[1]/255,c[2]/255,c[3]/255},1,2)
+                stroke(xx,foot+25,30,30,C.white,0.31)
+                hit(xx,foot+25,30,30,function()
+                    colors:set_rgb(c[1],c[2],c[3]);apply_color()
+                end,"color_history_"..i)
+            end
+        end
+        -- Floating size control, analogous to the official Windows/Mac widget.
+        if color_float then
+            line(x+w-18,y+h-5,x+w-5,y+h-18,1.6,C.white)
+            line(x+w-11,y+h-5,x+w-5,y+h-11,1.6,C.white)
+            hit(x+w-24,y+h-24,24,24,function()
+                local mx,my=pointer()
+                color_resize={mx=mx,my=my,w=w,h=h}
+            end,"color_resize")
+        end
+        if color_dialog then
+            local pw=math.min(365,w-35)
+            local ph=213
+            local px=x+(w-pw)/2
+            local py=y+(h-ph)/2
+            rectangle(x,y,w,h,C.deep,0.54)
+            hit(x,y,w,h,function() end,"color_dialog_shield")
+            rectangle(px,py,pw,ph,C.light,1,7)
+            label(color_dialog=="hex" and "Hex Color Code" or
+                (color_dialog=="new_palette" and "Create New Palette" or
+                    "Rename Palette"),
+                px+15,py+23,pw-30,"normal","center",C.ink)
+            rectangle(px+24,py+87,pw-48,41,C.white,1,3)
+            stroke(px+24,py+87,pw-48,41,C.blue)
+            label(color_input,px+33,py+100,pw-66,"normal","left",C.ink)
+            hit(px+24,py+87,pw-48,41,function()
+                color_input_replace=true
+            end,"color_dialog_input")
+            local bw=(pw-63)/2
+            plain_button(px+24,py+157,bw,36,"Cancel",function()
+                color_dialog=nil
+            end)
+            local function confirm()
+                local ok,err=pcall(function()
+                    if color_dialog=="hex" then
+                        colors:set_hex(color_input)
+                        apply_color()
+                    elseif color_dialog=="new_palette" then
+                        local id=colors:create_palette(color_input)
+                        color_palette_page=math.floor((id-1)/3)
+                    else colors:rename_palette(colors.active_palette,color_input) end
+                end)
+                if ok then color_dialog=nil
+                else notice("Invalid color or palette name.") end
+            end
+            plain_button(px+39+bw,py+157,bw,36,"OK",confirm)
+            hit(px+39+bw,py+157,bw,36,confirm,"color_dialog_confirm")
+        end
+end
+
 function draw_editor_panel()
     local name=panel
     local x,y,w,h
@@ -2120,323 +2446,7 @@ function draw_editor_panel()
         label("Amostra visual — pincel real no canvas",
             rx,inner_y+inner_h-32,rw,"tiny","center",C.soft)
     elseif name=="color" then
-        local function apply_color()
-            state:set_color(colors.current[1],colors.current[2],colors.current[3])
-            local hue=colors:hsb()
-            picker_hue=(hue%360)/360
-            palette_index=0
-        end
-        local function from_pointer(mx,my,wheel_x,wheel_y,radius)
-            local dx,dy=mx-wheel_x,my-wheel_y
-            local distance=math.sqrt(dx*dx+dy*dy)
-            local h,s,b=colors:hsb()
-            if distance>=radius-23 then
-                local a
-                if math.atan2 then a=math.atan2(dy,dx)
-                elseif dx~=0 then
-                    a=math.atan(dy/dx)
-                    if dx<0 then a=a+math.pi end
-                else a=dy>=0 and math.pi/2 or -math.pi/2 end
-                h=(((a+math.pi/2)/(2*math.pi))%1)*360
-            else
-                local radius_inner=radius-23
-                local u=(dx+dy)/(2*radius_inner)+0.5
-                local v=(dy-dx)/(2*radius_inner)+0.5
-                s=math.max(0,math.min(1,u))*100
-                b=(1-math.max(0,math.min(1,v)))*100
-            end
-            colors:set_hsb(h,s,b)
-            apply_color()
-        end
-        -- Header controls (a floating Color Window was introduced in v14).
-        hit(x+5,y+2,w-176,31,function()
-            if color_float then
-                local mx,my=pointer()
-                color_drag={dx=mx-x,dy=my-y}
-            end
-        end,"color_move_bar")
-        rectangle(x+w-172,y+4,127,28,
-            color_float and C.blue or C.deep,0.93,2)
-        label(color_float and "Dock Color" or "Floating Window",
-            x+w-170,y+12,123,"tiny","center",C.white)
-        hit(x+w-172,y+4,127,28,function()
-            color_float=not color_float
-            color_position=nil
-        end,"color_float_toggle")
-        -- Current / previous colors are explicit in the official Color window.
-        local current=colors.current
-        local prev=colors.previous
-        rectangle(x+16,y+47,68,43,
-            {current[1]/255,current[2]/255,current[3]/255},1,3)
-        stroke(x+16,y+47,68,43,C.white,0.68)
-        rectangle(x+91,y+47,68,43,{prev[1]/255,prev[2]/255,prev[3]/255},1,3)
-        stroke(x+91,y+47,68,43,C.white,0.68)
-        label("Current",x+16,y+92,68,"tiny","center",C.white)
-        label("Previous",x+91,y+92,68,"tiny","center",C.white)
-        hit(x+91,y+47,68,43,function()
-            colors:set_rgb(prev[1],prev[2],prev[3]);apply_color()
-        end,"color_previous")
-        rectangle(x+183,y+51,w-200,34,C.deep,0.92,3)
-        label(colors:hex(),x+192,y+61,w-218,"normal","center",C.white)
-        hit(x+183,y+51,w-200,34,function()
-            color_dialog="hex"
-            color_input=colors:hex()
-            color_input_replace=true
-        end,"color_hex")
-        -- Toggle HSB/Palette and HSB/RGB separately.
-        local tab_y=y+119
-        local half=(w-32)/2
-        for i,item in ipairs({
-            {"HSB",false},{"Palette",true}
-        }) do
-            local xx=x+16+(i-1)*half
-            local selected=colors.palette_mode==item[2]
-            rectangle(xx,tab_y,half-3,33,
-                selected and C.blue or C.deep,0.89,2)
-            label(item[1],xx+4,tab_y+9,half-11,
-                "small","center",C.white)
-            local desired=item[2]
-            hit(xx,tab_y,half-3,33,function()
-                colors.palette_mode=desired
-            end,"color_mode_"..item[1]:lower())
-        end
-        if not colors.palette_mode then
-            local wheel_x=x+127
-            local wheel_y=y+265
-            local radius=104
-            draw_hue_wheel(wheel_x,wheel_y,radius)
-            local _,saturation,brightness=colors:hsb()
-            local diamond_r=radius-23
-            local u=saturation/100
-            local v=1-brightness/100
-            local pick_x=wheel_x+(u-v)*diamond_r
-            local pick_y=wheel_y+(u+v-1)*diamond_r
-            rgba(C.deep)
-            love.graphics.setLineWidth(3)
-            love.graphics.circle("line",pick_x,pick_y,7)
-            rgba(C.white)
-            love.graphics.setLineWidth(1.8)
-            love.graphics.circle("line",pick_x,pick_y,7)
-            hit(wheel_x-radius,wheel_y-radius,radius*2,radius*2,function()
-                local mx,my=pointer()
-                from_pointer(mx,my,wheel_x,wheel_y,radius)
-                color_wheel_drag={
-                    x=wheel_x,y=wheel_y,r=radius,
-                    action=from_pointer,apply=apply_color
-                }
-            end,"color_wheel")
-            local sx=x+264
-            local track_w=math.max(60,w-306)
-            local hue,saturation,brightness=colors:hsb()
-            local channels=colors.rgb_mode and {
-                {"R",current[1],255},{"G",current[2],255},
-                {"B",current[3],255},{"Opacity",colors.opacity,100}
-            } or {
-                {"H",math.floor(hue+0.5),360},
-                {"S",math.floor(saturation+0.5),100},
-                {"B",math.floor(brightness+0.5),100},
-                {"Opacity",colors.opacity,100}
-            }
-            for index,entry in ipairs(channels) do
-                local yy=y+169+(index-1)*69
-                label(entry[1],sx,yy,track_w*0.55,"small","left",C.white)
-                label(tostring(entry[2])..(index==4 and "%" or ""),
-                    sx+track_w*0.53,yy,track_w*0.47,
-                    "small","right",C.white)
-                rectangle(sx,yy+27,track_w,5,C.soft,0.62,2)
-                local frac=entry[2]/entry[3]
-                rectangle(sx,yy+27,track_w*frac,5,C.blue,1,2)
-                rgba(C.white)
-                love.graphics.circle("fill",sx+track_w*frac,yy+29,7)
-                local mode=colors.rgb_mode and "RGB" or "HSB"
-                local number=index
-                local function set_fraction(fr)
-                    fr=math.max(0,math.min(1,fr))
-                    if number==4 then colors:set_opacity(fr*100)
-                    elseif mode=="RGB" then
-                        colors:set_rgb_channel(number,math.floor(fr*255+0.5))
-                        apply_color()
-                    else
-                        local hue,sat,bright=colors:hsb()
-                        if number==1 then hue=fr*360
-                        elseif number==2 then sat=fr*100
-                        else bright=fr*100 end
-                        colors:set_hsb(hue,sat,bright)
-                        apply_color()
-                    end
-                end
-                hit(sx,yy+15,track_w,31,function()
-                    local mx=pointer()
-                    set_fraction((mx-sx)/track_w)
-                    color_slider_drag={x=sx,w=track_w,change=set_fraction}
-                end,"color_slider_"..(colors.rgb_mode and
-                    ({"r","g","b","opacity"})[index] or
-                    ({"h","s","b","opacity"})[index]))
-            end
-            rectangle(sx,y+448,track_w,32,C.deep,0.86,3)
-            label(colors.rgb_mode and "RGB → HSB" or "HSB → RGB",
-                sx+3,y+456,track_w-6,"small","center",C.white)
-            hit(sx,y+448,track_w,32,function()
-                colors:toggle_rgb_mode()
-            end,"color_rgb_toggle")
-            label("Color preview only — no painting engine",
-                x+12,y+h-56,w-24,"tiny","center",C.soft)
-        else
-            local active=colors.palettes[colors.active_palette]
-            label("Color Palettes",x+20,y+167,w-40,"small","left",C.white)
-            local pal_x=x+17
-            local pal_list=colors:palettes_list()
-            local max_page=math.max(0,math.floor((#pal_list-1)/3))
-            color_palette_page=math.max(0,
-                math.min(max_page,color_palette_page))
-            local tab_w=math.max(50,math.min(132,(w-113)/3))
-            for j=1,3 do
-                local i=color_palette_page*3+j
-                local item=pal_list[i]
-                if item then
-                    local px=pal_x+(j-1)*(tab_w+2)
-                    rectangle(px,y+190,tab_w,30,
-                        colors.active_palette==i and C.blue or C.deep,
-                        0.91,3)
-                    label(item.name,px+3,y+200,tab_w-6,"small","center",C.white)
-                    local id=i
-                    hit(px,y+190,tab_w,30,function()
-                        colors:choose_palette(id)
-                    end,"color_palette_"..i)
-                end
-            end
-            local prev_x=x+w-70
-            local next_x=x+w-37
-            rectangle(prev_x,y+191,30,27,C.deep,
-                color_palette_page>0 and 0.94 or 0.46,2)
-            rectangle(next_x,y+191,30,27,C.deep,
-                color_palette_page<max_page and 0.94 or 0.46,2)
-            label("<",prev_x,y+197,30,"small","center",C.white)
-            label(">",next_x,y+197,30,"small","center",C.white)
-            if color_palette_page>0 then
-                hit(prev_x,y+191,30,27,function()
-                    color_palette_page=color_palette_page-1
-                end,"color_palette_prev")
-            end
-            if color_palette_page<max_page then
-                hit(next_x,y+191,30,27,function()
-                    color_palette_page=color_palette_page+1
-                end,"color_palette_next")
-            end
-            local current_name=active.name
-            label(current_name.." ("..#active.colors..")",
-                x+17,y+233,w-34,"normal","left",C.white)
-            local menu_y=y+259
-            local bw=(w-43)/3
-            for i,item in ipairs({
-                {"New",function()
-                    color_dialog="new_palette"
-                    color_input="New Palette"
-                    color_input_replace=true
-                end,"color_new_palette"},
-                {"Rename",function()
-                    color_dialog="rename_palette"
-                    color_input=active.name
-                    color_input_replace=true
-                end,"color_rename_palette"},
-                {"+ Color",function()
-                    colors:add_current()
-                end,"color_add_swatch"}
-            }) do
-                local px=x+17+(i-1)*(bw+4)
-                rectangle(px,menu_y,bw,36,C.deep,0.94,2)
-                label(item[1],px+2,menu_y+11,bw-4,
-                    "small","center",C.white)
-                hit(px,menu_y,bw,36,item[2],item[3])
-            end
-            local swatches=colors:colors()
-            local swatch_size=32
-            local swatch_gap=6
-            local columns=math.max(1,math.floor((w-42)/(swatch_size+swatch_gap)))
-            local max_slots=math.max(1,math.floor((h-415)/40)*columns)
-            for i=1,math.min(#swatches,max_slots) do
-                local col=(i-1)%columns
-                local row=math.floor((i-1)/columns)
-                local px=x+17+col*(swatch_size+swatch_gap)
-                local py=y+310+row*40
-                local c=swatches[i]
-                rectangle(px,py,swatch_size,swatch_size,
-                    {c[1]/255,c[2]/255,c[3]/255},1,2)
-                stroke(px,py,swatch_size,swatch_size,C.white,0.42)
-                local id=i
-                hit(px,py,swatch_size,swatch_size,function()
-                    colors:select_color(id);apply_color()
-                    color_swatch_drag={
-                        from=id,initial_x=px+swatch_size/2,
-                        initial_y=py+swatch_size/2,
-                        grid_x=x+17,grid_y=y+310,
-                        step=swatch_size+swatch_gap,
-                        columns=columns
-                    }
-                end,"color_swatch_"..i)
-            end
-            local recent=colors:history_list()
-            local foot=y+h-100
-            label("Color History — selected colors",
-                x+16,foot,w-32,"small","left",C.white)
-            for i=1,math.min(#recent,11) do
-                local c=recent[i]
-                local xx=x+16+(i-1)*37
-                rectangle(xx,foot+25,30,30,
-                    {c[1]/255,c[2]/255,c[3]/255},1,2)
-                stroke(xx,foot+25,30,30,C.white,0.31)
-                hit(xx,foot+25,30,30,function()
-                    colors:set_rgb(c[1],c[2],c[3]);apply_color()
-                end,"color_history_"..i)
-            end
-        end
-        -- Floating size control, analogous to the official Windows/Mac widget.
-        if color_float then
-            line(x+w-18,y+h-5,x+w-5,y+h-18,1.6,C.white)
-            line(x+w-11,y+h-5,x+w-5,y+h-11,1.6,C.white)
-            hit(x+w-24,y+h-24,24,24,function()
-                local mx,my=pointer()
-                color_resize={mx=mx,my=my,w=w,h=h}
-            end,"color_resize")
-        end
-        if color_dialog then
-            local pw=math.min(365,w-35)
-            local ph=213
-            local px=x+(w-pw)/2
-            local py=y+(h-ph)/2
-            rectangle(x,y,w,h,C.deep,0.54)
-            hit(x,y,w,h,function() end,"color_dialog_shield")
-            rectangle(px,py,pw,ph,C.light,1,7)
-            label(color_dialog=="hex" and "Hex Color Code" or
-                (color_dialog=="new_palette" and "Create New Palette" or
-                    "Rename Palette"),
-                px+15,py+23,pw-30,"normal","center",C.ink)
-            rectangle(px+24,py+87,pw-48,41,C.white,1,3)
-            stroke(px+24,py+87,pw-48,41,C.blue)
-            label(color_input,px+33,py+100,pw-66,"normal","left",C.ink)
-            hit(px+24,py+87,pw-48,41,function()
-                color_input_replace=true
-            end,"color_dialog_input")
-            local bw=(pw-63)/2
-            plain_button(px+24,py+157,bw,36,"Cancel",function()
-                color_dialog=nil
-            end)
-            local function confirm()
-                local ok,err=pcall(function()
-                    if color_dialog=="hex" then
-                        colors:set_hex(color_input)
-                        apply_color()
-                    elseif color_dialog=="new_palette" then
-                        local id=colors:create_palette(color_input)
-                        color_palette_page=math.floor((id-1)/3)
-                    else colors:rename_palette(colors.active_palette,color_input) end
-                end)
-                if ok then color_dialog=nil
-                else notice("Invalid color or palette name.") end
-            end
-            plain_button(px+39+bw,py+157,bw,36,"OK",confirm)
-            hit(px+39+bw,py+157,bw,36,confirm,"color_dialog_confirm")
-        end
+        draw_color_panel(x,y,w,h)
     elseif name=="tools" then
         local cols=preferences:effective_tool_columns()
         local rows=math.ceil(#tools/cols)
@@ -2601,8 +2611,15 @@ function draw_editor_panel()
                 preferences:toggle_undo_messages()
                 save_preferences()
             end,"pref_undo_messages")
-        label("Additional settings are not yet reconstructed.",
-            bx,y+400,bw,"tiny","center",C.soft)
+        pref_toggle(y+381,"Animar contorno da seleção",
+            preferences.animate_selection_outline,
+            function()
+                preferences:toggle_selection_animation()
+                paint:setSelectionAnimation(preferences.animate_selection_outline)
+                save_preferences()
+            end,"pref_selection_animation")
+        label("Desativado: contorno estático e sem shader.",
+            bx,y+439,bw,"tiny","center",C.soft)
     elseif name=="text" then
         label("Text tool selected.",x+15,y+99,w-30,"normal","center",C.white)
         label("Editing artwork is outside the UI-only scope.",x+12,y+145,w-24,"small","center",C.soft)
@@ -2647,20 +2664,31 @@ function love.load()
         end
         if warning then notice(warning) end
     end
+    if selection_pause_e2e=='create' then
+        -- O teste usa arquivo próprio; restos de execução anterior não contam.
+        love.filesystem.remove(preferences_file)
+    end
     if not (smoke or e2e or settings_e2e or gallery_e2e) then
-        local content=love.filesystem.read("editor-preferences.txt")
+        local content=love.filesystem.read(preferences_file)
         if content then
             local ok,restored=pcall(EditorPreferences.decode,content)
             if ok then preferences=restored
             else notice("Invalid saved settings; using defaults.") end
         end
     end
+    paint:setSelectionAnimation(preferences.animate_selection_outline)
     if (e2e or settings_e2e or color_e2e)
         and os.getenv("PAINT_LUA_E2E_RES") then
         local w,h=os.getenv("PAINT_LUA_E2E_RES"):match("^(%d+)x(%d+)$")
         assert(w and h,"PAINT_LUA_E2E_RES deve ser largura x altura")
         local ok=love.window.setMode(tonumber(w),tonumber(h),{resizable=true})
         assert(ok,"Não foi possível configurar resolução de teste")
+    end
+    if selection_pause_e2e then
+        state:open_gallery();state:open_new_canvas();state:create_canvas(64,64)
+        local d=assert(paint:sync(state))
+        d.selection=require('core.selection').rect(d,8,8,40,40)
+        assert(#d.history.undo==0,'UI v0.39: a preferência não deve gerar histórico')
     end
     if selection_outline_e2e then
         state:open_gallery();state:open_new_canvas();state:create_canvas(1024,1024)
@@ -3916,6 +3944,62 @@ function love.update()
     end
     if gallery_e2e and #controls>0 then
         gallery_e2e_update()
+        return
+    end
+    if selection_pause_e2e and #controls>0 then
+        if selection_pause_e2e=='create' then
+            if selection_pause_stage==0 then
+                assert(preferences.animate_selection_outline
+                    and paint.selectionAnimated and paint.ants.shader,
+                    'UI v0.39: animação deveria iniciar ligada')
+                click_control('back')
+                assert(panel=='back','UI v0.39: Back não abriu')
+            elseif selection_pause_stage==1 then
+                click_control('back_settings')
+                assert(panel=='settings','UI v0.39: Settings não abriu')
+            elseif selection_pause_stage==2 then
+                click_control('pref_selection_animation')
+                assert(not preferences.animate_selection_outline
+                    and not paint.selectionAnimated and not paint.ants.shader,
+                    'UI v0.39: botão não desativou e liberou o shader')
+                local file=assert(love.filesystem.read(preferences_file))
+                assert(file:find('animate_selection_outline=0',1,true),
+                    'UI v0.39: opção desativada não foi salva')
+                assert(#paint.doc.history.undo==0,'UI v0.39: toggle criou histórico')
+                panel=nil
+            else
+                assert(not paint.ants.shader and not paint.selectionAnimated,
+                    'UI v0.39: modo estático compilou shader no quadro seguinte')
+                print('PASS: UI v0.39: desativação real pelo botão e gravação')
+                love.event.quit(0)
+                return
+            end
+        else
+            if selection_pause_stage==0 then
+                assert(not preferences.animate_selection_outline
+                    and not paint.selectionAnimated and not paint.ants.shader,
+                    'UI v0.39: preferência desativada não foi reaberta')
+                set_panel('settings')
+            elseif selection_pause_stage==1 then
+                click_control('pref_selection_animation')
+                assert(preferences.animate_selection_outline
+                    and paint.selectionAnimated,
+                    'UI v0.39: não reativou animação pelo botão')
+            else
+                assert(paint.ants.shader and not paint.ants.unavailable,
+                    'UI v0.39: reativação não compilou shader')
+                assert(#paint.doc.history.undo==0,
+                    'UI v0.39: preferência alterou o histórico')
+                local data=assert(love.filesystem.read(preferences_file))
+                assert(data:find('animate_selection_outline=1',1,true),
+                    'UI v0.39: animação reativada não persistiu')
+                love.filesystem.remove(preferences_file)
+                print('PASS: UI v0.39: reabertura, reativação e shader na GPU')
+                love.event.quit(0)
+                return
+            end
+        end
+        selection_pause_stage=selection_pause_stage+1
         return
     end
     if selection_outline_e2e and #controls>0 then

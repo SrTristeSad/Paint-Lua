@@ -117,3 +117,244 @@ Veja `tests/test_selection_ants_v038.lua`,
 Os testes reais do shader ficam em `tests/test_selection_ants_love_v038.lua`,
 chamados no fim de `tests/test_bridge_love.lua` sem criar novos locais
 na função principal (limite de 200 variáveis locais por função no Lua).
+
+### Atualização v0.39 — pausa de marching ants
+
+`src/editor_preferences.lua` mantém `animate_selection_outline=true`
+por padrão e registra `animate_selection_outline=0|1` no mesmo
+arquivo `version=1` (campo **opcional ao ler** para retrocompatibilidade).
+`Bridge:setSelectionAnimation(bool)` libera o shader quando desativado;
+`drawSelection` desenha as bordas geométricas da v0.37 no modo
+estático sem enviar uniform nem compilar shader. A interface usa
+**Settings → Animar contorno da seleção** e chama o setter tanto após
+restaurar preferências quanto depois de cada clique. O teste E2E
+`PAINT_LUA_SELECTION_PAUSE_E2E=create/check` usa arquivo de
+preferências **isolado**, em duas execuções LÖVE. Manter `main`,
+NPNT1–NPNT5, histórico e seleção fora dessa preferência. Ver
+`docs/PAUSA_CONTORNOS_v039.md` e `tests/test_selection_pause_v039.lua`.
+
+### Revisão integrada da v0.39 (PR #6)
+
+Corrigido o invariante `nil` (sem seleção = pintar livremente) versus
+`Selection.empty(doc)` (zero pixels selecionáveis). `Selection.invert`
+nunca pode produzir `nil` ao inverter uma seleção de documento inteiro:
+retângulo integral e varinha invertida plena passam a máscara vazia,
+com histórico, NPNT5 e undo/redo válidos. `Desmarcar` permanece
+separado e é a única operação para limpar seleção deliberadamente.
+A renderização ignora máscaras positivas sem tiles antes de
+instanciar o shader; o arraste sobre uma seleção vazia segue visível.
+A regressão está em `tests/test_selection_contract_integration.lua`
+e no E2E real `tests/test_selection_contract_love.lua`.
+Não abrir mais PRs empilhados até revisão da cadeia #2→#3→#4→#5→#6;
+a `main` não foi alterada pela revisão.
+
+### Gate Windows do pacote final (revisão v0.39)
+
+`.github/workflows/check.yml` inclui `windows_release` dependente do
+job Linux de compilação, testes e upload do ZIP, usando o **mesmo artefato**
+gerado pela CI. Baixa LÖVE 11.5 portátil oficial e verifica SHA-256
+fixo antes de invocar `testar.bat`. O launcher mantém o padrão
+interativo; só quando `PAINT_LUA_VERIFY_ONLY=1` valida a instalação e
+encerra sem abrir a UI, e `PAINT_LUA_NO_PAUSE=1` evita travar automação.
+Testar também a falha com `app/selection_ants.lua` ausente (exit 5).
+Não chamar esse gate "teste manual Windows/GPU", pois só cobre
+distribuição/launcher. As configurações de console/título no `conf.lua`
+foram sincronizadas com v0.39.
+
+### E2E Windows do aplicativo real (v0.39)
+
+`scripts/windows-love-e2e.ps1` é executado do ZIP descompactado com
+`lovec.exe` oficial, verificado por SHA-256. Os modos `smoke` e `bridge`
+exigem respectivamente captura PNG real da interface e testes do motor
+com LÖVE real. Ambos têm timeout e imprimem stdout/stderr na falha.
+
+O runner hospedado Windows Server 2025 foi identificado com OpenGL 1.1
+GDI Generic, incompatível com o mínimo OpenGL 2.1 exigido pelo LÖVE.
+Somente quando a saída comprovar **exatamente esse erro**, a flag
+`-AllowMissingGraphics` pode declarar **SKIP com warning** e registrar
+`PAINT_LUA_GRAPHICS_UNAVAILABLE=1` para não repetir a tentativa GPU.
+Outros problemas continuam falhando a CI. Não confundir skip com teste
+gráfico Windows aprovado, nem com teste manual de caneta/performance.
+Em Windows de usuário final, rodar sem essa flag para verificação estrita.
+
+### Guard central de seleção (última revisão do PR #6)
+
+`Bridge:applySelection(selection)` deve recusar novas mutações quando
+`stroke`, `job`, `transform`, `selectionDrag`, `pngPreview`
+ou `doc.history.stroke` estiverem ativos. Isso vale para atalhos
+Ctrl+A, o painel e chamadas diretas; evita snapshots estruturais
+durante uma prévia/gesto. `finishSelection` zera `selectionDrag`
+antes de combinar o resultado: não bloquear o commit legítimo.
+`clearSelection` continua cancelando explicitamente o arraste
+antes de retirar a área. Testes em
+`tests/test_selection_operation_lock_v039.lua`. Manter NPNT e pixels
+intocados; `main` não foi modificada.
+
+### Lock externo do preenchimento cooperativo
+
+`Bridge:applySelection`, `Bridge:canEditStructure` e a sincronização
+de propriedades em `Bridge:sync` verificam o token
+`doc.history._fillLock`, mesmo quando `bridge.job` é nil (job do
+motor externo ao controlador). Recusar atalhos/mutação enquanto o balde
+possui pixels parciais e adiar a atualização de camada na UI,
+sem lançar `History.recordStructure` bloqueado. Testes integrados
+em `tests/test_selection_fill_lock_v039.lua`: lock antes da primeira
+fatia, pixels parciais, cancelamento com rollback, aplicação de camada
+adiada e Ctrl+A/undo/redo após liberar. Preservar NPNT e `main`.
+
+### Histórico e seleção durante gestos (PR #6)
+
+`Bridge:historyStep` deve recusar Ctrl+Z/Ctrl+Y sem alterar a seleção,
+`selectionDrag` ou as pilhas de histórico enquanto existir um
+arraste, inclusive com histórico anterior pendente. Não cancelar
+silenciosamente o gesto. Recusar o histórico também quando o lock
+`doc.history._fillLock` pertencer a um job de balde externo.
+
+`Bridge:beginSelection` deve bloquear retângulo, laço e varinha
+mágica durante `doc.history._fillLock` ou `doc.history.stroke`.
+A varinha não deve selecionar pixels parciais de um preenchimento
+que poderá sofrer rollback. Após cancelar o job, esses gestos e
+undo/redo devem voltar a funcionar. Testes:
+`tests/test_selection_lifecycle_v039.lua` (23 verificações).
+
+### Isolamento de documentos e cache de seleção (v0.39)
+
+`Bridge:attachDocument` deve recriar `uiByLayer={}` antes de
+`refreshModel`; a tabela tem chaves fortes e poderia reter todos
+os tiles `ImageData` de pinturas previamente abertas. Alinhar a
+troca ao `Bridge:sync(fresh)`, reiniciando `selectionMode='replace'`.
+`Bridge:dropImages` deve soltar também `selectionOutline=nil`;
+o cálculo de contornos retém máscara e tiles do documento anterior.
+`tests/test_document_switch_v039.lua` valida caches, cancelamento
+de balde com rollback, um arquivo NPNT reaberto, início da seleção,
+undo/redo e criação de tela seguinte. Não alterar o projeto salvo.
+
+### Bloqueio completo de sync durante jobs (v0.39)
+
+Em `Bridge:sync`, não tratar apenas `changed` (alterações de camada
+que exigem `History.recordStructure`): também detectar `pending`
+(opacidade e índice ativo, além das alterações estruturais). Com
+`history._fillLock`, `history.stroke` externo ou `self.job`,
+não modificar `doc.sel`, `layer.opacity` nem `uiByLayer`;
+retornar nil e preservar as mudanças no modelo para aplicação
+posterior. Opacidade continua sem histórico por frame; snapshot só
+para alterações estruturais. Testes em
+`tests/test_layer_sync_during_jobs_v039.lua`.
+
+### Transações abertas proíbem exportação PNG (v0.39)
+
+`src/png_export.lua` deve rejeitar `Export.save(doc)` quando
+`doc.history._fillLock` ou `doc.history.stroke` estiverem ativos,
+antes de compor, criar pastas ou gravar PNGs. Mesmo que o balde não
+seja `Bridge.job`, `Bridge:exportPNG` também deve rejeitar e
+exibir erro, sem exportar uma imagem provisória. Antes de exportar,
+verificar o resultado de `Bridge:sync(model)`; não ignorar um nil
+devido a operação pendente ou estado fora do editor. O controle
+de opacidade é sincronizado após o rollback sem criar undo por frame.
+Testes em `tests/test_png_export_operation_lock_v039.lua` (19).
+
+### Prévia e sincronização pendente de camadas (v0.39)
+
+`Bridge:sync` recusa qualquer mudança de camada (`pending`) em
+documento existente se `self.transform`, `self.pngPreview` ou
+`self.selectionDrag` estiverem ativos. Sem mudanças pendentes, a
+sincronização deve continuar funcionando normalmente para renderizar
+a prévia. Preservar propriedades e histórico do documento, manter
+as alterações pendentes no modelo e aplicar depois de confirmar ou
+cancelar. `Bridge:canEditStructure` não deve sobrescrever o motivo
+do bloqueio com `Abra um documento`. Testes:
+`tests/test_pending_preview_sync_v039.lua` (24 verificações).
+
+### Desmarcar não é cancelar o arraste (v0.39)
+
+`Bridge:clearSelection` deve chamar `applySelection(nil)`
+sem limpar `selectionDrag`. Enquanto um retângulo ou laço
+estiver em andamento, Ctrl+D e a ação do painel retornam false,
+preservam o gesto, a seleção anterior e as duas pilhas de
+histórico. Escape é o cancelamento explícito; após confirmar,
+Desmarcar volta a registrar uma ação de undo normal. Também
+recusar `invertSelection` e `combineSelection` logo no início
+quando `doc.history._fillLock` estiver ativo, antes de criar
+máscaras temporárias. Testes de regressão em
+`tests/test_selection_clear_during_drag_v039.lua` (27).
+
+### Confirmar importação PNG sem descartar edições da UI (v0.39)
+
+`Bridge:applyPNGImport` deve capturar uma cópia independente das
+entradas de `model.layers` **antes** de `refreshModel` (essa rotina
+reutiliza e reescreve tabelas). A inserção do PNG deve ocorrer antes
+de sincronizar alterações do painel, para que um PNG inválido não
+crie undo nem modifique camadas. Depois da inserção bem-sucedida,
+incorporar a nova camada ao modelo pendente e sincronizar as
+propriedades; manter o PNG ativo por padrão ou respeitar uma troca
+explícita da camada selecionada. A importação e as mudanças de
+camadas são ações distintas no histórico, sem snapshot extra se
+nada mudou. Testes em `tests/test_png_import_pending_commit_v039.lua`.
+
+### Reabrir arquivo atual sem abandonar jobs ativos (v0.39)
+
+`Bridge:load(model)` é acionado por Ctrl+O. Antes de decodificar
+o arquivo, recusar caso exista `self.stroke`, `self.job`,
+`self.selectionDrag`, `self.transform`, `self.pngPreview`,
+`doc.history.stroke` ou `doc.history._fillLock`. Sem isso,
+`attachDocument` substitui o documento e pode cancelar gestos
+sem confirmação, enquanto baldes externos nem são cancelados.
+Preservar estado, histórico e job ao recusar; após terminar ou
+cancelar, permitir recarga NPNT e de obra da galeria normalmente.
+Não bloquear `Bridge:attachDocument` usado intencionalmente
+para mudar de obra pela galeria.
+Teste: `tests/test_reload_during_operations_v039.lua` (32).
+
+### Confirmação de seleção sob lock adquirido depois do início (v0.39)
+
+Em `Bridge:finishSelection`, verificar `self.stroke`, `self.job`,
+`self.transform`, `self.pngPreview`, `doc.history._fillLock` e
+`doc.history.stroke` **antes** de zerar `self.selectionDrag`.
+Se a operação concorrente impedir a confirmação, manter gesto,
+pontos, modo de combinação, seleção anterior e undo/redo; só a
+confirmação bem-sucedida pode criar snapshot. Retomar depois do
+desbloqueio sem criar snapshots extra. Sem lock, laço degenerado
+continua sendo descartado como anteriormente. Regressões:
+`tests/test_selection_finish_race_v039.lua` (31).
+
+### Pincelada própria e coordenadas durante sync pendente (v0.39)
+
+`Bridge:sync` deve adiar qualquer mudança de camada também
+enquanto `self.stroke` ou `doc.history.stroke` estiverem
+ativos. Não finalizar a pincelada implicitamente por mudança
+estrutural, nem aplicar opacidade/troca da camada ativa durante
+o gesto. Em `Bridge:toCanvas`, quando a sincronização foi
+recusada por mudanças pendentes, continuar usando coordenadas
+do documento original apenas para `self.stroke`,
+`self.selectionDrag`, `self.transform` ou `self.pngPreview`
+e somente se `model.screen=='editor'`, `model.document`
+for o mesmo objeto e não houver `_fillLock`. Operações
+novas continuam respeitando os guardas de `sync`.
+Regressão: `tests/test_stroke_pending_layer_sync_v039.lua` (29).
+
+### Persistência NPNT exige sincronização confirmada (v0.39)
+
+`Bridge:save(model)` deve ser o ponto único de salvamento
+da interface: validar modelo da mesma obra, bloquear locks
+de preenchimento e pinceladas externas, finalizar apenas a
+pincelada pertencente à ponte, chamar `Bridge:sync(model)`
+e não escrever NPNT se `sync` retornar `nil`. Passar
+`state` nos chamadores de Ctrl+S, criação de obra e retorno
+à galeria; evitar chamar `paint:sync(state)` separadamente
+e ignorar falhas. `Bridge:save()` sem modelo permanece
+compatível para integrações já sincronizadas. Não gravar
+propriedades antigas se estiverem pendentes.
+Teste: `tests/test_save_pending_sync_v039.lua` (33).
+
+### Bloqueio comum de pintura e conta-gotas (v0.39)
+
+`Bridge:press`, `Bridge:pick` e `Bridge:bucket` devem
+recusar quando `self.stroke`, `self.job`, `self.transform`,
+`self.pngPreview`, `self.selectionDrag`, `doc.history.stroke`
+ou `doc.history._fillLock` estiverem ativos. Não iniciar uma
+operação secundária ao trocar a ferramenta durante a seleção;
+nunca amostrar pixels provisórios do balde externo. Para APIs
+diretas de pick/bucket, exigir modelo ligado à obra do editor.
+A recusa não pode criar histórico, consumir arraste ou jobs;
+depois da liberação, operações normais retomam. Regressão:
+`tests/test_paint_tool_operation_lock_v039.lua` (41).

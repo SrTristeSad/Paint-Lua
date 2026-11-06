@@ -10,7 +10,8 @@ function Preferences.new()
         popup_columns=3,
         show_tool_labels=true,
         invert_wheel=false,
-        show_undo_message=true
+        show_undo_message=true,
+        animate_selection_outline=true
     },Preferences)
 end
 
@@ -41,6 +42,11 @@ end
 function Preferences:toggle_undo_messages()
     self.show_undo_message=not self.show_undo_message
     return self.show_undo_message
+end
+
+function Preferences:toggle_selection_animation()
+    self.animate_selection_outline=not self.animate_selection_outline
+    return self.animate_selection_outline
 end
 
 function Preferences:effective_tool_columns()
@@ -83,6 +89,7 @@ function Preferences:encode()
         "show_tool_labels="..yes(self.show_tool_labels),
         "invert_wheel="..yes(self.invert_wheel),
         "show_undo_message="..yes(self.show_undo_message),
+        "animate_selection_outline="..yes(self.animate_selection_outline),
     },"\n").."\n"
 end
 
@@ -92,7 +99,8 @@ function Preferences.decode(content)
     local values={}
     local recognized={
         version=true,tool_position=true,popup_columns=true,
-        show_tool_labels=true,invert_wheel=true,show_undo_message=true
+        show_tool_labels=true,invert_wheel=true,show_undo_message=true,
+        animate_selection_outline=true
     }
     for line in content:gmatch("[^\r\n]+") do
         local key,value=line:match("^([%w_]+)=([%w_]+)$")
@@ -115,6 +123,13 @@ function Preferences.decode(content)
         local value=values[field]
         assert(value=="1" or value=="0","Valor booleano inválido")
         result[field]=value=="1"
+    end
+    -- Campo v0.39 opcional: arquivos v1 anteriores permanecem válidos.
+    -- O default é animado, como na v0.38; valores malformados são rejeitados.
+    if values.animate_selection_outline~=nil then
+        local value=values.animate_selection_outline
+        assert(value=="1" or value=="0","Animação de seleção inválida")
+        result.animate_selection_outline=value=="1"
     end
     return result
 end

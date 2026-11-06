@@ -1,6 +1,33 @@
-# Paint-Lua — Projeto único (v0.38)
+# Paint-Lua — Projeto único (v0.39)
 
 Editor experimental de pintura digital em Lua / LÖVE 11.5. A interface de Ibis-Lua e o núcleo de pintura v0.21 são **código-fonte do mesmo repositório**. Não há submódulos, download do Ibis-Lua na inicialização ou integração atual com DragonBones/Bono-Lua.
+
+## Verificação automatizada no Windows
+
+A CI da versão v0.39 agora executa **dois jobs**: o teste completo
+de pixels e interface no LÖVE 11.5 no Linux e uma verificação adicional
+em **`windows-latest`** do ZIP realmente disponibilizado ao usuário.
+O job Windows extrai o pacote, baixa e valida por SHA-256 o runtime
+portátil oficial do LÖVE 11.5, executa `testar.bat` com
+`PAINT_LUA_VERIFY_ONLY=1` e comprova que o launcher recusa um arquivo
+essencial ausente. Esse modo de verificação **não abre a interface**;
+no uso normal, `testar.bat` continua a abrir o editor normalmente.
+
+O job Windows também tenta rodar o **editor real com `lovec.exe`**,
+capturar uma imagem PNG da interface e executar os testes de integração
+NPNT, máscaras e GPU diretamente no Windows. Essa etapa é executada do
+**ZIP extraído**, sem depender de arquivos do checkout do GitHub.
+O runner Windows do GitHub ofereceu apenas **OpenGL 1.1 (GDI Generic)**,
+abaixo do requisito do LÖVE 11.5 (**OpenGL 2.1 ou OpenGL ES 2**).
+A CI emite um **aviso de teste gráfico não executado**, mantendo a
+validação do pacote e do inicializador. Essa dispensa é permitida
+**somente** quando o próprio LÖVE diagnostica esse driver incompatível;
+erros de aplicação, falhas inesperadas e timeouts continuam reprovando.
+
+Em um Windows com GPU compatível, o script
+`scripts/windows-love-e2e.ps1` exige a inicialização, a captura PNG
+e os testes de integração. Uma sessão manual ainda é necessária para
+testar canetas, mesas digitalizadoras e desempenho em outras GPUs.
 
 ## Teste no Windows
 
@@ -9,6 +36,56 @@ Editor experimental de pintura digital em Lua / LÖVE 11.5. A interface de Ibis-
 3. Execute **testar.bat** na pasta raiz. Não precisa de Git, Python, PowerShell ou conexão à internet para iniciar.
 
 Clone alternativo: git clone https://github.com/SrTristeSad/Paint-Lua.git (sem --recurse-submodules).
+
+## Proteção das operações de seleção
+
+Os comandos **Selecionar tudo**, **Inverter**, **Combinar** e
+**Desmarcar** compartilham agora a mesma proteção contra mudanças
+enquanto há uma pincelada, **preenchimento cooperativo**, arraste de
+seleção, transformação ou prévia de PNG em andamento. Isso evita alterar a seleção e criar
+histórico intermediário antes de concluir o gesto. As ferramentas
+continuam funcionando normalmente quando a operação termina.
+
+Detalhes e testes em
+[docs/REVISAO_INTEGRACAO_v039.md](docs/REVISAO_INTEGRACAO_v039.md).
+
+## Revisão de integração v0.35–v0.39
+
+A revisão da linha de desenvolvimento identificou e corrigiu um caso
+de segurança da seleção: **inverter uma área que cobre o documento todo
+agora cria uma seleção vazia de verdade**. Anteriormente essa operação
+removia a seleção (`nil`), liberando a pintura em toda a obra. Assim,
+**Inverter** mantém o significado de complemento e **Desmarcar**
+(Ctrl+D) continua sendo o comando explícito para pintura irrestrita.
+
+A mesma revisão evita inicializar ou executar o shader das formigas
+quando não há nenhum pixel selecionado. Foram incluídos testes de
+inversão, combinação, pincel/balde, histórico, NPNT5 e renderização
+em LÖVE real. A correção integra o **PR #6**, sem abrir outro PR ou
+alterar a `main`.
+
+Detalhes e ordem de integração: [docs/REVISAO_INTEGRACAO_v039.md](docs/REVISAO_INTEGRACAO_v039.md).
+
+## Novidade v0.39 — pausar animação dos contornos
+
+O editor oferece **Settings → Animar contorno da seleção** para
+ligar ou desligar o movimento das faixas `marching ants`.
+
+A animação continua **ligada por padrão**, como na v0.38. Quando a
+opção é desligada, o programa desenha o **contorno estático vermelho**
+da v0.37, **sem executar ou compilar o shader**. Se o shader já estiver
+carregado, ele é liberado; ao reativar a animação, é criado novamente.
+A geometria da seleção, inclusive inversões e contornos esparsos,
+permanece intacta, assim como os pixels, NPNT5 e undo/redo.
+
+A preferência é gravada automaticamente em `editor-preferences.txt`
+e restaurada ao abrir o aplicativo. O formato de preferências continua
+`version=1`: arquivos antigos, que não têm essa opção, usam o valor
+padrão animado; campos inválidos e duplicados seguem rejeitados.
+O teste de interface abre o editor em **duas execuções do LÖVE** para
+verificar desligar, salvar, reabrir e reativar.
+
+Veja [docs/PAUSA_CONTORNOS_v039.md](docs/PAUSA_CONTORNOS_v039.md).
 
 ## Novidade v0.38 — contornos animados (*marching ants*)
 
@@ -85,7 +162,7 @@ continua reservado à importação PNG.
 O comando não altera pixels, cria uma operação de histórico e é salvo em
 **NPNT5**. A inversão usa uma máscara esparsa, sem rasterizar todo o canvas.
 Inverter sem seleção seleciona tudo; inverter uma seleção retangular total
-desmarca. Por segurança, regiões iniciais retangulares ou laços com mais
+agora produz uma **seleção vazia**. Use Desmarcar para liberar a pintura. Por segurança, regiões iniciais retangulares ou laços com mais
 de **2 milhões de pixels** não podem ser invertidos de uma vez.
 
 Consulte [docs/INVERSAO_SELECAO_v035.md](docs/INVERSAO_SELECAO_v035.md).
@@ -281,3 +358,131 @@ Para continuar em outro chat: PROMPT_DO_PROJETO.md e AGENTS.md.
 **Correção adicional v0.33:** os botões de giro fino de PNG (−1°, +1°, Giro 0°)
 agora são aceitos mesmo enquanto a importação está em prévia; a proteção
 contra outras operações continua ativa.
+
+### Atalhos durante uma seleção
+
+Enquanto um retângulo ou laço está sendo arrastado, **Ctrl+Z / Ctrl+Y**
+não desfazem ações anteriores nem cancelam o gesto em silêncio.
+Confirme ou cancele a seleção primeiro. Um preenchimento cooperativo
+ainda em andamento também impede novos gestos de seleção e o uso da
+varinha, para evitar leitura de pixels provisórios.
+
+Os testes de ciclo de vida ficam em
+`tests/test_selection_lifecycle_v039.lua`.
+
+### Trocar de obra sem reter o documento anterior
+
+Ao abrir uma pintura existente ou criar outra tela, o editor descarta
+as referências de camadas, o contorno incremental e os caches da obra
+anterior. A primeira seleção de uma obra aberta pela galeria começa
+em **Substituir**, sem herdar acidentalmente o modo Subtrair/Interseção
+da pintura anterior. Um preenchimento ainda ativo é cancelado com
+rollback antes da troca. Regressões em
+`tests/test_document_switch_v039.lua`.
+
+### Propriedades de camadas durante uma operação
+
+Enquanto o balde cooperativo ou a varinha mágica estão calculando uma
+região, o editor **adia alterações de opacidade e troca da camada
+ativa** até concluir ou cancelar a operação. Isso evita modificar
+a camada usada por um trabalho ainda em andamento. O controle de
+opacidade mantém seu comportamento anterior, sem criar uma ação de
+desfazer para cada atualização; a regressão está em
+`tests/test_layer_sync_during_jobs_v039.lua`.
+
+### Exportar PNG somente depois de concluir a operação
+
+A exportação PNG aguarda a conclusão ou o cancelamento do balde
+cooperativo e de pinceladas ainda abertas, inclusive quando essas
+operações são iniciadas diretamente pelo motor. O aplicativo nunca
+grava uma imagem de pixels provisórios que poderiam desaparecer após
+um cancelamento. Com o documento liberado, a exportação aplica as
+propriedades pendentes das camadas e continua criando nomes
+incrementais sem sobrescrever PNGs existentes. Testes:
+`tests/test_png_export_operation_lock_v039.lua`.
+
+### Mudanças de camada durante prévias
+
+Uma transformação em andamento, a prévia de importação PNG e o
+arraste de seleção mantêm a camada original até o gesto ser confirmado
+ou cancelado. Alterações de nome, visibilidade, mesclagem, opacidade
+e camada ativa feitas durante a prévia ficam pendentes até a próxima
+sincronização permitida; o histórico da seleção e o histórico das
+camadas permanecem independentes. Cobertura de regressão em
+`tests/test_pending_preview_sync_v039.lua`.
+
+### Desmarcar durante arraste de seleção
+
+**Ctrl+D** ou o botão **Desmarcar** não cancelam um retângulo ou laço
+enquanto ele está sendo desenhado. Conclua o gesto com o mouse ou
+cancele explicitamente com **Esc** antes de desmarcar. Isso protege a
+seleção anterior e evita gerar uma ação de desfazer indesejada.
+A inversão e a combinação de seleções também evitam cálculos
+desnecessários enquanto um balde cooperativo estiver ativo.
+Regressões: `tests/test_selection_clear_during_drag_v039.lua`.
+
+### Confirmar PNG preserva edições pendentes das camadas
+
+Ao posicionar um PNG sobre a tela, mudanças de camada feitas no painel
+ficam pendentes até confirmar ou cancelar a prévia. **Confirmar a
+importação não descarta essas mudanças**: nomes, opacidade,
+visibilidade, modo de mesclagem, recorte e até uma nova camada são
+aplicados depois do PNG. Se a camada ativa não foi alterada, o PNG
+fica selecionado; se outra camada foi escolhida, a escolha é
+respeitada. O histórico mantém duas ações independentes, permitindo
+desfazer primeiro as edições do painel e depois a importação.
+Regressão: `tests/test_png_import_pending_commit_v039.lua`.
+
+### Ctrl+O durante uma edição
+
+**Ctrl+O** reabre a última versão salva da obra atual. Para não
+descartar um gesto inadvertidamente, o comando agora exige
+concluir ou cancelar seleção em arraste, transformação, prévia
+de importação PNG, pincelada, varinha ou preenchimento antes
+de reabrir o arquivo. A tentativa recusada não altera a pintura,
+o histórico ou o trabalho em andamento. Abrir outra obra
+deliberadamente pela galeria continua usando o fluxo próprio.
+Regressões: `tests/test_reload_during_operations_v039.lua`.
+
+### Confirmar uma seleção durante um preenchimento
+
+Se um preenchimento ou outro trabalho bloquear o histórico depois
+que você começar um retângulo ou laço, o editor não descarta mais
+o gesto ao tentar confirmá-lo. Ele mantém o traçado e a seleção
+anterior até que o trabalho termine ou seja cancelado. Assim, é
+possível confirmar a seleção sem redesenhá-la e sem gerar ações
+duplicadas no histórico. Testes:
+`tests/test_selection_finish_race_v039.lua`.
+
+### Pinceladas e edições de camadas
+
+Enquanto um traço de pincel está aberto, mudanças de camada
+no painel ficam pendentes até soltar ou cancelar o gesto.
+O editor mantém a camada original e o movimento do cursor,
+sem encerrar a pincelada inesperadamente. Ao soltar,
+o histórico registra a pintura primeiro; depois aplica a
+renomeação/visibilidade como ação independente, quando necessário.
+O mesmo ajuste mantém o arraste de seleção e a prévia PNG
+responsivos enquanto propriedades do painel aguardam sincronização.
+Cobertura: `tests/test_stroke_pending_layer_sync_v039.lua`.
+
+### Ctrl+S e alterações de camadas ainda pendentes
+
+O salvamento NPNT agora confirma a pincelada aberta, sincroniza
+as alterações de nome, opacidade e camada ativa do painel e
+somente então grava a obra. Assim, **Ctrl+S** e o salvamento ao
+retornar à galeria não informam sucesso enquanto essas
+propriedades ainda estiverem desatualizadas no arquivo.
+Preenchimentos externos ou pinceladas não confirmadas por
+outro componente continuam bloqueando o salvamento até
+concluir/cancelar. Regressões em `tests/test_save_pending_sync_v039.lua`.
+
+### Ferramentas durante seleção ou preenchimento
+
+Pincel, borracha, balde e conta-gotas aguardam o fim de um
+retângulo/laço ou de outra operação pendente. Em particular,
+o conta-gotas não coleta cores de um preenchimento cooperativo
+que ainda pode ser cancelado. Depois de confirmar ou cancelar
+o trabalho, as ferramentas voltam a funcionar normalmente,
+sem históricos concorrentes. Cobertura:
+`tests/test_paint_tool_operation_lock_v039.lua`.

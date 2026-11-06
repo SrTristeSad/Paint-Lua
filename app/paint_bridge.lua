@@ -39,9 +39,19 @@ function Bridge.new()
     stroke=nil,job=nil,jobKind=nil,selectionDrag=nil,selectionMode='replace',jobSelectionMode=nil,
     transform=nil,transformDrag=nil,
     pngPreview=nil,pngDrag=nil,
-    cache=nil,gpu={},ants={},thumbCache=setmetatable({}, {__mode='k'}),
+    cache=nil,gpu={},ants={},selectionAnimated=true,thumbCache=setmetatable({}, {__mode='k'}),
     thumbRenders=0,maskMode=nil,maskOwner=nil,
-    artworkId=nil,filename='meu-desenho.npnt',status='Paint-Lua v0.27 pronto'},Bridge)
+    artworkId=nil,filename='meu-desenho.npnt',status='Paint-Lua v0.39 pronto'},Bridge)
+end
+
+-- Preferência da interface, não do documento: não entra no histórico NPNT.
+-- Ao desativar, libera a GPU e volta ao traço estático da v0.37.
+function Bridge:setSelectionAnimation(enabled)
+  assert(type(enabled)=='boolean','animação de seleção deve ser booleana')
+  if self.selectionAnimated==enabled then return false end
+  self.selectionAnimated=enabled
+  if not enabled then SelectionAnts.release(self.ants) end
+  return true
 end
 
 function Bridge:dropImages()
@@ -56,6 +66,9 @@ function Bridge:dropImages()
     end
   end
   self.thumbCache=setmetatable({}, {__mode='k'})
+  -- O contorno incremental retém a seleção e os tiles do documento anterior.
+  -- O cache deve morrer também quando a nova obra começa sem seleção.
+  self.selectionOutline=nil
   if self.cache then self.cache:clear() end
   self.cache=nil
 end
@@ -69,12 +82,27 @@ function Bridge:cancelJob()
   end
 end
 
+-- Uma transação aberta diretamente no motor não pertence à ponte:
+-- sem a referência ao Job externo, trocar de obra não permite cancelá-lo.
+-- Os preenchimentos da própria ponte continuam canceláveis em cancelJob.
+local function hasExternalTransaction(self)
+  local history=self.doc and self.doc.history
+  if not history then return false end
+  local ownFill=self.job and self.jobKind=='fill'
+  return (history._fillLock and not ownFill)
+    or (history.stroke and not ownFill and not self.stroke)
+end
+
 -- Aplica somente diferenças efetivas. Uma interação de camada produz um
 -- snapshot estrutural; redesenhar a UI não insere histórico adicional.
 function Bridge:sync(model)
   if model.screen~='editor' or not model.document then return nil end
   local fresh = self.doc==nil or self.modelDocument~=model.document
   if fresh then
+    if hasExternalTransaction(self) then
+      self.status='Conclua ou cancele a operação externa antes de trocar de obra'
+      return nil
+    end
     self:finish(true)
     self:cancelJob()
     self:dropImages()
@@ -95,6 +123,9 @@ function Bridge:sync(model)
   local nextLayers,nextMap={},{}
   local selected=1
   local changed = #doc.layers~=#model.layers
+  -- Opacidade e camada ativa são mudanças leves (sem snapshot por frame),
+  -- mas também precisam aguardar o fim de um preenchimento cooperativo.
+  local pending=changed
   for i,entry in ipairs(model.layers) do
     local layer=self.byId[entry.id]
     if not layer then
@@ -106,23 +137,42 @@ function Bridge:sync(model)
     end
     nextLayers[i]=layer
     nextMap[entry.id]=layer
-    self.uiByLayer[layer]=entry
+    if layer.opacity~=clamp(entry.opacity or 100,0,100) then pending=true end
     if doc.layers[i]~=layer or layer.name~=entry.name
       or layer.visible~=(entry.visible~=false)
       or layer.blend~=(blends[entry.blending] or 'normal')
       or (layer.clipped or false)~=(entry.clipping==true) then
       changed=true
+      pending=true
     end
     if entry.id==model.active_layer_id then selected=i end
   end
+  if doc.sel~=selected then pending=true end
   if #nextLayers==0 then
     -- Estado defensivo: o motor exige pelo menos uma camada editável.
     nextLayers[1]=Doc.newLayer('Camada 1')
     changed=true
+    pending=true
+  end
+  if pending and not fresh then
+    -- Alterações da UI ficam pendentes enquanto uma prévia ou seleção
+    -- em arraste utiliza a camada original; nenhuma propriedade ou
+    -- snapshot pode vazar para a operação ainda não confirmada.
+    if self.transform or self.pngPreview or self.selectionDrag then
+      self.status='Confirme ou cancele a prévia/seleção antes de alterar camadas'
+      return nil
+    end
+    -- Também adiar alterações durante o traço da própria ponte.
+    -- Antes, opacidade/troca de camada atravessavam o gesto ativo e uma
+    -- alteração estrutural podia finalizá-lo sem o usuário soltar o mouse.
+    if self.stroke or doc.history._fillLock or doc.history.stroke
+      or self.job then
+      self.status='Conclua a operação antes de alterar camadas'
+      return nil
+    end
   end
   if changed and not fresh then
     self:finish(false)
-    if self.job then return nil end -- propriedades mudam após finalizar o job
     History.recordStructure(doc)
   end
   doc.layers=nextLayers
@@ -130,6 +180,7 @@ function Bridge:sync(model)
   self.byId=nextMap
   for i,entry in ipairs(model.layers) do
     local layer=doc.layers[i]
+    self.uiByLayer[layer]=entry
     layer.name=entry.name
     layer.visible=entry.visible~=false
     layer.opacity=clamp(entry.opacity or 100,0,100)
@@ -259,8 +310,16 @@ end
 -- as APIs transacionais do nucleo; nunca reimplementamos rasterizacao na UI.
 function Bridge:canEditStructure(model)
   local doc=self:sync(model)
-  if not doc then self.status='Abra um documento';return nil end
-  if self.stroke or self.job or self.transform or self.selectionDrag or self.pngPreview then
+  if not doc then
+    -- sync pode recusar uma mudança pendente sem fechar o documento:
+    -- preservar a razão real do bloqueio para a interface.
+    if model.screen~='editor' or not model.document or not self.doc then
+      self.status='Abra um documento'
+    end
+    return nil
+  end
+  if self.stroke or self.job or self.transform or self.selectionDrag
+    or self.pngPreview or doc.history.stroke or doc.history._fillLock then
     self.status='Finalize a operação atual antes de editar camadas';return nil
   end
   return doc
@@ -403,7 +462,16 @@ end
 
 -- Coordenadas inversas da transformacao usada pelo editor Ibis-Lua.
 function Bridge:toCanvas(model,view,prefs,uiScale,W,H,rx,ry)
-  if not self:sync(model) then return nil end
+  if not self:sync(model) then
+    -- Alterações do painel podem ficar pendentes durante um gesto. Nesse
+    -- caso, continuar convertendo o cursor na geometria da obra original:
+    -- bloquear a sincronização não deve congelar o pincel, laço ou prévia.
+    -- Nunca usar o documento anterior se o modelo/tela já mudou.
+    if not (self.doc and self.modelDocument==model.document
+      and model.screen=='editor' and
+      (self.stroke or self.selectionDrag or self.transform or self.pngPreview)
+      and not self.doc.history._fillLock) then return nil end
+  end
   local left=prefs.tool_position=="left" and 62 or 0
   local right=prefs.tool_position=="right" and 75 or 34
   local aw,ah=W-left-right,H-160
@@ -428,7 +496,26 @@ function Bridge:point(model,view,prefs,uiScale,W,H,rx,ry)
   return px,py
 end
 
+-- Trocar de ferramenta no meio de um arraste não autoriza uma segunda
+-- operação. Bloquear também jobs/gestos iniciados diretamente no motor:
+-- o conta-gotas nunca deve amostrar os pixels ainda provisórios do balde.
+local function canUsePaintTool(self,model,requireDocument)
+  local h=self.doc and self.doc.history
+  if self.stroke or self.job or self.transform or self.pngPreview
+    or self.selectionDrag or (h and (h._fillLock or h.stroke)) then
+    self.status='Conclua ou cancele a operação antes de pintar ou coletar cor'
+    return false
+  end
+  if requireDocument and (not self.doc or not model or
+    model.screen~='editor' or model.document~=self.modelDocument) then
+    self.status='Abra a obra correta antes de usar a ferramenta'
+    return false
+  end
+  return true
+end
+
 function Bridge:pick(model,px,py)
+  if not canUsePaintTool(self,model,true) then return false end
   local img=Composite.flattenRegion(self.doc,math.floor(px),math.floor(py),1,1)
   local r,g,b,a=img:getPixel(0,0)
   if a<=0 then self.status='Conta-gotas: pixel transparente';return false end
@@ -439,6 +526,7 @@ end
 
 function Bridge:bucket(model,px,py,opacity)
   if self.job then self.status='Balde ocupado';return false end
+  if not canUsePaintTool(self,model,true) then return false end
   local entry=model:active_layer()
   if entry.locked then self.status='Camada bloqueada';return false end
   if entry.alpha_lock then
@@ -456,11 +544,13 @@ function Bridge:bucket(model,px,py,opacity)
 end
 
 function Bridge:press(model,view,prefs,uiScale,W,H,rx,ry,opacity)
-  if self.stroke or self.job or self.transform or self.pngPreview then return false end
   if model.active_tool~='brush' and model.active_tool~='eraser'
     and model.active_tool~='bucket' and model.active_tool~='eyedropper' then
     return false
   end
+  -- Antes até de calcular o ponto, impedir intercalar pintura ou amostragem
+  -- com seleção, prévias e jobs que ainda detêm o histórico.
+  if not canUsePaintTool(self,model,false) then return false end
   local px,py=self:point(model,view,prefs,uiScale,W,H,rx,ry)
   if not px then return false end
   if model.active_tool=='eyedropper' then return self:pick(model,px,py) end
@@ -502,7 +592,17 @@ end
 -- Selecao eh um estado do documento e participa do historico estrutural.
 -- Objetos complexos ficam imutaveis depois de aplicados.
 function Bridge:applySelection(selection)
-  if not self.doc or self.stroke or self.job or self.transform then return false end
+  if not self.doc then return false end
+  -- Todas as vias de alteração (Ctrl+A, ações do painel, inversão,
+  -- combinação e desmarcar) compartilham a mesma proteção.
+  -- Uma seleção pendente, prévia de PNG ou pincelada não pode criar
+  -- um snapshot estrutural concorrente e sobrescrever seu estado.
+  if self.stroke or self.job or self.transform or self.selectionDrag
+    or self.pngPreview or self.doc.history.stroke
+    or self.doc.history._fillLock then
+    self.status='Conclua a operação atual antes de alterar a seleção'
+    return false
+  end
   if selection then Selection.validate(self.doc,selection) end
   local previous=self.doc.selection
   if previous==selection then return false end
@@ -535,7 +635,8 @@ end
 -- só é registrado depois que o cálculo terminou sem erros.
 function Bridge:combineSelection(selection,mode)
   if not self.doc or self.stroke or self.job or self.transform or self.selectionDrag
-    or self.pngPreview or self.doc.history.stroke then
+    or self.pngPreview or self.doc.history.stroke or
+    self.doc.history._fillLock then
     self.status='Conclua a operação atual antes de selecionar'
     return false
   end
@@ -566,7 +667,7 @@ function Bridge:invertSelection(model)
   local doc=self:sync(model)
   if not doc then self.status='Abra um documento';return false end
   if self.stroke or self.job or self.transform or self.selectionDrag
-    or self.pngPreview or doc.history.stroke then
+    or self.pngPreview or doc.history.stroke or doc.history._fillLock then
     self.status='Conclua a operação atual antes de inverter a seleção'
     return false
   end
@@ -578,13 +679,21 @@ function Bridge:invertSelection(model)
 end
 
 function Bridge:clearSelection()
-  self.selectionDrag=nil
+  -- Ctrl+D/desmarcar não é um comando de cancelamento de arraste.
+  -- Preservar o gesto para applySelection recusar uma mudança concorrente.
+  -- Escape é o comando explícito de cancelar o arraste.
   return self:applySelection(nil)
 end
 
 function Bridge:beginSelection(model,view,prefs,uiScale,W,H,rx,ry)
   if self.stroke or self.job or self.transform or self.selectionDrag
     or self.pngPreview then return false end
+  -- A varinha lê pixels do documento. Não iniciar um trabalho de seleção
+  -- sobre pixels temporários de um balde externo à ponte.
+  if not self.doc or self.doc.history._fillLock or self.doc.history.stroke then
+    self.status='Finalize a pincelada ou preenchimento antes de selecionar'
+    return false
+  end
   local tool=model.active_tool
   if tool~='selection_rect' and tool~='lasso' and tool~='magic_wand' then
     return false
@@ -623,17 +732,43 @@ function Bridge:finishSelection(model,view,prefs,uiScale,W,H,rx,ry)
   local drag=self.selectionDrag
   if not drag then return false end
   if rx then self:moveSelection(model,view,prefs,uiScale,W,H,rx,ry) end
-  self.selectionDrag=nil
+  -- Um balde ou gesto externo pode adquirir o lock APÓS beginSelection.
+  -- Não descartar o arraste antes de saber se é possível confirmá-lo:
+  -- a recusa precisa preservar pontos, seleção anterior e undo/redo.
+  local doc=self.doc
+  if not doc or self.stroke or self.job or self.transform or self.pngPreview
+    or doc.history._fillLock or doc.history.stroke then
+    self.status='Conclua a operação atual antes de confirmar a seleção'
+    return false
+  end
+  -- Construir a seleção antes de descartar o arraste. Uma falha na
+  -- validação do laço ou no limite da combinação não deve consumir o
+  -- gesto, nem impedir que o usuário o cancele com Escape.
   local selection
   if drag.kind=='selection_rect' then
-    selection=Selection.rect(self.doc,drag.startX,drag.startY,drag.x,drag.y)
+    local ok,value=pcall(Selection.rect,doc,drag.startX,drag.startY,drag.x,drag.y)
+    if not ok then self.status='Retângulo inválido: '..tostring(value);return false end
+    selection=value
   elseif drag.points and #drag.points>=3 then
-    local ok,value=pcall(Selection.polygon,self.doc,drag.points)
+    local ok,value=pcall(Selection.polygon,doc,drag.points)
     if not ok then self.status='Laço inválido: '..tostring(value);return false end
     selection=value
   end
-  if not selection then self.status='Seleção vazia';return false end
-  return self:combineSelection(selection,drag.mode)
+  if not selection then
+    self.selectionDrag=nil
+    self.status='Seleção vazia'
+    return false
+  end
+  -- combineSelection protege contra gestos concorrentes; liberar o
+  -- arraste apenas durante a confirmação e restaurá-lo se ela falhar.
+  self.selectionDrag=nil
+  local ok,changed=pcall(self.combineSelection,self,selection,drag.mode)
+  if not ok or not changed then
+    self.selectionDrag=drag
+    if not ok then self.status='Seleção: '..tostring(changed) end
+    return false
+  end
+  return true
 end
 
 -- A prévia retém o ImageData da camada ativa; o documento só muda ao aplicar.
@@ -838,26 +973,28 @@ function Bridge:drawSelection(x,y,canvasScale,seconds)
   local sel=self.doc.selection
   local drag=self.selectionDrag
   if not sel and not drag then return end
+  -- A ausência de tiles numa máscara positiva significa ZERO pixels
+  -- selecionados, não ausência de seleção. Não inicializar GPU à toa.
+  local emptyWand=sel and sel.kind=='wand' and not sel.mask.inverted
+    and next(sel.mask.tiles)==nil
+  if emptyWand and not drag and not self.transform then return end
   local g=love.graphics
   g.setLineWidth(1/math.max(canvasScale,0.01))
   g.setColor(0.96,0.30,0.20,0.95)
   if self.transform then
     Transform.drawPreview(self.transform,x,y,canvasScale)
   end
-  if sel and not self.transform then
+  if sel and not self.transform and not emptyWand then
     local now=seconds
     if now==nil then
       now=love.timer and love.timer.getTime() or os.clock()
     end
-    SelectionAnts.render(g,self.ants,now,function(animated)
+    local function drawOutline(animated)
       if animated then g.setColor(1,1,1,0.95)
       else g.setColor(0.96,0.30,0.20,0.95) end
       -- A geometria é sempre a mesma da v0.37. Apenas as cores dos pixels
       -- de linha alternam na tela; nunca se inventam segmentos ou bboxes.
-      if sel.kind=='wand' and not sel.mask.inverted
-        and next(sel.mask.tiles)==nil then
-        -- Máscara vazia: não há contorno nem animação visível.
-      elseif sel.kind=='polygon' then
+      if sel.kind=='polygon' then
         local p=sel.points
         for i=1,#p do
           local a,b=p[i],p[i%#p+1]
@@ -881,7 +1018,13 @@ function Bridge:drawSelection(x,y,canvasScale,seconds)
       else
         g.rectangle('line',x+sel.x,y+sel.y,sel.w,sel.h)
       end
-    end)
+    end
+    if self.selectionAnimated then
+      SelectionAnts.render(g,self.ants,now,drawOutline)
+    else
+      -- Sem shader, sem uniform temporal e sem custo de animação.
+      drawOutline(false)
+    end
   end
   if drag then
     g.setColor(0.17,0.62,0.95,0.98)
@@ -919,6 +1062,9 @@ function Bridge:finish(cancel)
   if not ok then
     self.status="Finalizacao: "..tostring(err)
     pcall(s.cancel,s)
+    -- A falha não pode ser confundida com pincelada confirmada por
+    -- Ctrl+S, exportação PNG ou desfazer/refazer.
+    return false,self.status
   end
 end
 
@@ -986,6 +1132,10 @@ end
 -- atual caso o arquivo solicitado não tenha podido ser aberto.
 function Bridge:attachDocument(model,doc,id)
   assert(doc and doc.w and doc.h,'documento inválido')
+  if hasExternalTransaction(self) then
+    self.status='Conclua ou cancele a operação externa antes de trocar de obra'
+    return false
+  end
   if id then GalleryStorage.artworkPath(id) end
   self:cancelTransform()
   self:cancelPNGImport()
@@ -995,6 +1145,12 @@ function Bridge:attachDocument(model,doc,id)
   self.maskMode,self.maskOwner=nil,nil
   self:dropImages()
   self.doc=doc
+  -- attachDocument e sync(fresh) devem ter a mesma política de troca de obra:
+  -- nenhum mapa de camadas antigo nem modo de seleção pendente é herdado.
+  -- uiByLayer tem chaves fortes; preservá-lo reteria os pixels das obras antigas.
+  self.uiByLayer={}
+  self.selectionMode='replace'
+  self.jobSelectionMode=nil
   self.modelDocument={width=doc.w,height=doc.h}
   model.document=self.modelDocument
   model.screen='editor'
@@ -1012,12 +1168,27 @@ function Bridge:attachDocument(model,doc,id)
   return true
 end
 
-function Bridge:save()
+function Bridge:save(model)
   if self.transform or self.pngPreview then return nil,'confirme ou cancele a prévia antes de salvar' end
   if not self.doc then return nil,'nenhum documento' end
+  if model and (model.screen~='editor' or model.document~=self.modelDocument) then
+    return nil,'documento alterado antes de salvar'
+  end
   if self.job then return nil,'operação em andamento' end
   if self.selectionDrag then return nil,'finalize a seleção antes de salvar' end
-  self:finish(false)
+  -- Jobs iniciados fora da ponte também podem manter pixels provisórios.
+  -- Recusar antes de finalizar o traço ou acessar o sistema de arquivos.
+  if self.doc.history._fillLock or
+    (self.doc.history.stroke and not self.stroke) then
+    return nil,'conclua ou cancele a operação antes de salvar'
+  end
+  -- A pincelada pertencente à ponte pode ser confirmada ao salvar, como
+  -- antes; só depois disso é seguro aplicar as edições pendentes do painel.
+  local finalized,finishErr=self:finish(false)
+  if finalized==false then return nil,finishErr end
+  if model and not self:sync(model) then
+    return nil,self.status or 'não foi possível sincronizar as camadas antes de salvar'
+  end
   local ok,err
   if self.artworkId then
     ok,err=GalleryStorage.saveArtwork(self.doc,self.artworkId)
@@ -1104,6 +1275,21 @@ function Bridge:applyPNGImport(model)
     self.status='Documento alterado durante a prévia'
     return false
   end
+  -- sync adia as alterações do painel durante a prévia. Guardá-las antes
+  -- de refreshModel, que reescreve as entradas da UI e descartaria nomes,
+  -- opacidade e até camadas adicionadas enquanto o PNG era posicionado.
+  -- As cópias são necessárias porque refreshModel reutiliza as tabelas.
+  local pendingLayers={}
+  for i,entry in ipairs(model.layers) do
+    local copy={}
+    for key,value in pairs(entry) do copy[key]=value end
+    pendingLayers[i]=copy
+  end
+  local requestedActive=model.active_layer_id
+  local originalActive
+  for id,existing in pairs(self.byId) do
+    if existing==doc.layers[doc.sel] then originalActive=id;break end
+  end
   local ok,layer,count=pcall(PNGImport.insert,doc,session.source,session.filename,session)
   if not ok or not layer then
     self.status='PNG: '..tostring(ok and count or layer)
@@ -1111,6 +1297,20 @@ function Bridge:applyPNGImport(model)
   end
   self:cancelPNGImport()
   self:refreshModel(model)
+  -- O PNG passa a ser a camada ativa por padrão. Se o usuário mudou
+  -- explicitamente a seleção no painel, respeitar esse pedido pendente.
+  local imported=self.uiByLayer[layer]
+  pendingLayers[#pendingLayers+1]=imported
+  model.layers=pendingLayers
+  if requestedActive and requestedActive~=originalActive then
+    model.active_layer_id=requestedActive
+  end
+  -- Registra as mudanças pendentes depois da importação, como operação
+  -- estrutural independente: undo primeiro desfaz o painel, depois o PNG.
+  if not self:sync(model) then
+    self.status='PNG aplicado; sincronização de camadas pendente'
+    return false
+  end
   self:dropImages()
   self.cache=Composite.newCache(doc,{maxTiles=96})
   self.status='PNG aplicado: '..tostring(count)..' pixels (Ctrl+Z desfaz)'
@@ -1194,17 +1394,42 @@ end
 -- A exportação nunca modifica a pintura nem substitui um PNG existente.
 function Bridge:exportPNG(model)
   if not self.doc then return nil,'nenhum documento aberto' end
-  if self.transform or self.job or self.selectionDrag or self.pngPreview then
-    return nil,'conclua ou cancele a operação antes de exportar'
+  -- Uma chamada de outra obra não pode trocar o documento via sync,
+  -- nem exportar uma tela nova no lugar da pintura atualmente anexada.
+  if model and (model.screen~='editor' or model.document~=self.modelDocument) then
+    self.status='Documento alterado antes de exportar'
+    return nil,self.status
   end
-  self:finish(false)
-  if model then self:sync(model) end
+  if self.transform or self.job or self.selectionDrag or self.pngPreview
+    or self.doc.history._fillLock or
+    (self.doc.history.stroke and not self.stroke) then
+    self.status='Conclua ou cancele a operação antes de exportar'
+    return nil,self.status
+  end
+  local finalized,finishErr=self:finish(false)
+  if finalized==false then return nil,finishErr end
+  -- Se alterações de camada ainda não puderem ser sincronizadas,
+  -- não exportar uma composição desatualizada.
+  if model and not self:sync(model) then
+    self.status='Não foi possível sincronizar as camadas antes de exportar'
+    return nil,self.status
+  end
   local path,err=PNGExport.save(self.doc,self.artworkId or 'atual')
   self.status=path and ('PNG exportado em '..path) or ('Exportação: '..tostring(err))
   return path,err
 end
 
 function Bridge:load(model)
+  -- Reabrir o arquivo atual (Ctrl+O) não é uma troca deliberada de obra
+  -- pela galeria. Não descartar gestos, prévias ou jobs ainda pendentes:
+  -- especialmente baldes externos cujo token não pertence a self.job.
+  if self.stroke or self.job or self.selectionDrag
+    or self.transform or self.pngPreview or
+    (self.doc and self.doc.history and
+      (self.doc.history._fillLock or self.doc.history.stroke)) then
+    self.status='Conclua ou cancele a operação antes de reabrir a obra'
+    return nil,self.status
+  end
   local doc,err
   if self.artworkId then
     doc,err=GalleryStorage.loadArtwork(self.artworkId)
@@ -1228,10 +1453,21 @@ function Bridge:historyStep(model,redo)
     self.status='Finalize ou cancele o trabalho antes do histórico'
     return false
   end
-  self:finish(false)
-  self.selectionDrag=nil
-  self:sync(model)
-  if not self.doc then return false end
+  -- Não cancelar silenciosamente um laço/retângulo ao pressionar
+  -- Ctrl+Z/Y. O gesto pendente não entrou no histórico ainda.
+  if self.selectionDrag then
+    self.status='Finalize ou cancele o arraste antes do histórico'
+    return false
+  end
+  -- Jobs externos à ponte também seguram o token de preenchimento.
+  if self.doc and (self.doc.history._fillLock or
+    (self.doc.history.stroke and not self.stroke)) then
+    self.status='Finalize o preenchimento antes do histórico'
+    return false
+  end
+  if self:finish(false)==false then return false end
+  local doc=self:sync(model)
+  if not doc then return false end
   local fn=redo and History.redo or History.undo
   local ok,changed=pcall(fn,self.doc)
   self.status=not ok and tostring(changed) or
@@ -1253,8 +1489,7 @@ function Bridge:key(model,key)
   if key=='a' then self:selectAll(model);return true end
   if key=='d' then self:clearSelection();return true end
   if key=='s' then
-    self:sync(model)
-    local ok,err=self:save()
+    local ok,err=self:save(model)
     if not ok then self.status=tostring(err) end
     return true
   end

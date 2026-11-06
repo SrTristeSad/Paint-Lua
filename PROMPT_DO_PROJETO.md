@@ -119,3 +119,58 @@ Sem suporte a shader o contorno anterior permanece estático. O drag
 continua azul, a prévia de transformação mantém seu desenho próprio
 e documentos/NPNT/histórico/pintura não são alterados. Testar no LÖVE
 real, inclusive diferença temporal de pixels capturados da GPU.
+
+### Estado v0.39 — animação configurável
+
+Settings tem uma opção persistente **Animar contorno da seleção**,
+inicialmente ativa. Quando desligada, a seleção volta ao contorno
+vermelho estático da v0.37 sem shader; a GPU é liberada imediatamente
+e só recompilada ao reativar. O campo opcional
+`animate_selection_outline=0|1` é aceito nos arquivos de preferências
+versão 1, mantendo os arquivos antigos válidos. Essa mudança visual
+não faz parte do NPNT nem do histórico do documento.
+
+### Revisão de integração da v0.39
+
+A combinação de seleções da v0.36 exige distinguir "máscara vazia"
+(`kind='wand'`, sem tiles, `inverted=false`) de ausência de seleção
+(`nil` = pintura irrestrita). Corrigimos a inversão de retângulo
+integral e máscara integral invertida: ambas devem resultar numa
+máscara vazia, nunca limpar a seleção. Isso inclui obras grandes,
+NPNT5 e undo/redo. O desenho ignora uma máscara vazia antes do shader,
+sem ocultar o arraste de uma seleção em andamento. Revisar a cadeia
+de PRs #2–#6 antes de novos recursos; não modificar `main` sem decisão.
+
+### Gate de distribuição Windows v0.39
+
+A CI executa teste Linux (LÖVE real, GPU, persistência, NPNT1–NPNT5)
+seguido de job `windows_release`. O Windows descompacta o ZIP gerado
+pela CI e chama `testar.bat` com LÖVE 11.5 portátil cuja SHA-256 é
+validada. As flags de automação `PAINT_LUA_VERIFY_ONLY=1` e
+`PAINT_LUA_NO_PAUSE=1` não mudam o comportamento padrão do usuário.
+Não tratar a verificação do launcher como prova de desenho real
+no Windows ou de caneta/mesa digitalizadora.
+
+### E2E real em Windows (v0.39, após distribuição)
+
+Além do `testar.bat` e conferência de arquivos no Windows, executar
+`scripts/windows-love-e2e.ps1` contra a pasta do ZIP extraído,
+com LÖVE 11.5 `lovec.exe`. Os modos `smoke` (PNG de interface)
+e `bridge` (integração de documento e GPU) têm timeout
+e captura de stdout/stderr. O runner GitHub Windows hospedado revelou
+OpenGL 1.1, abaixo do mínimo do LÖVE: a CI permite **skip com
+aviso explícito** apenas com `-AllowMissingGraphics` e assinatura de
+erro confirmada pelo motor. Demais falhas e timeouts continuam fatais.
+No Windows do usuário, o teste permanece estrito (sem essa flag).
+Não alegar renderização Windows confirmada antes dos modos passarem,
+nem confundir isso com teste de stylus/pressão.
+
+### Preservação do histórico durante gestos v0.39
+
+O PR #6 agora recusa Ctrl+Z/Ctrl+Y enquanto uma seleção está sendo
+arrastada, preservando o gesto e as pilhas de undo/redo; após concluir
+o arraste, o histórico volta a funcionar. Também recusa novos gestos
+de seleção (inclusive a varinha) durante um balde cooperativo externo
+ao controller, antes e durante pixels temporários. Depois de cancelar
+o balde, rollback e seleção retornam ao estado normal. Cobertura em
+`tests/test_selection_lifecycle_v039.lua` (23 testes).

@@ -9,9 +9,11 @@ A seleção inversa não altera os pixels de nenhuma camada. O comando
 é salvo e reaberto em **NPNT5**, sem mudança do formato.
 
 Com nenhuma seleção ativa, o comando seleciona tudo; ao inverter uma
-seleção retangular que cobre o documento inteiro, desmarca. Nesse
-último caso, a pintura volta a ficar irrestrita, como sempre ocorreu
-quando não há seleção no Paint-Lua.
+seleção retangular que cobre o documento inteiro, a partir da
+correção de integração v0.39 a seleção se torna **vazia**, bloqueando
+a pintura. Para voltar à edição irrestrita, use **Desmarcar** (Ctrl+D).
+Isso corrige o comportamento anterior, que confundia inversão de
+seleção total com remoção da seleção.
 
 ## Geometria e limites
 

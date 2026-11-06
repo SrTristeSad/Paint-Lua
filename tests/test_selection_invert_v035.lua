@@ -45,8 +45,10 @@ return function(check)
   check('v0.35: varinha original imutável',not wand.mask.inverted)
   check('v0.35: inexistente vira selecionar tudo',
     Sel.contains(Sel.invert(d,nil),63,63))
-  check('v0.35: selecionar tudo vira desmarcar',
-    Sel.invert(d,Sel.rect(d,0,0,63,63))==nil)
+  local emptyFull=assert(Sel.invert(d,Sel.rect(d,0,0,63,63)))
+  check('v0.40: inverter seleção total preserva área vazia',
+    emptyFull.kind=='wand' and not Sel.contains(emptyFull,0,0)
+    and not Sel.contains(emptyFull,63,63))
   local large=Doc.new(4096,4096,'Grande')
   local small=Sel.rect(large,12,12,13,13)
   local bigInverse=assert(Sel.invert(large,small))

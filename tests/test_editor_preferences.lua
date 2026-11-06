@@ -3,6 +3,7 @@ local P=require("src.editor_preferences")
 local p=P.new()
 assert(p.tool_position=="left" and p.popup_columns==3)
 assert(p.show_tool_labels and not p.invert_wheel)
+assert(p.animate_selection_outline)
 assert(p:rail_x(1024)==0)
 assert(p:effective_tool_columns()==1)
 assert(not pcall(function() p:set_popup_columns(2) end))
@@ -47,6 +48,19 @@ assert(not restored.show_tool_labels and restored.invert_wheel)
 assert(not restored.show_undo_message and restored:encode()==encoded)
 local default=P.new()
 assert(P.decode(default:encode()).tool_position=="left")
+assert(default.animate_selection_outline)
+assert(not default:toggle_selection_animation())
+local paused=default:encode()
+assert(paused:find("animate_selection_outline=0",1,true))
+assert(not P.decode(paused).animate_selection_outline)
+assert(default:toggle_selection_animation())
+local legacy=default:encode():gsub("animate_selection_outline=1\n","")
+assert(P.decode(legacy).animate_selection_outline,
+    "Previous v1 preferences must default to animation")
+assert(not pcall(P.decode,paused:gsub("animate_selection_outline=0",
+    "animate_selection_outline=yes")))
+assert(not pcall(P.decode,paused.."animate_selection_outline=1\n"))
+
 for _,contents in ipairs({
     "", "garbage", "version=2\n",
     "version=1\ntool_position=unknown\npopup_columns=2\n",

@@ -1,7 +1,7 @@
-name: Paint-Lua v0.38 — contornos de seleção animados
+name: Paint-Lua v0.39 — integração e segurança da seleção
 on:
   push:
-    branches: [main, feature/paint-v035-invert-selection, feature/paint-v036-combine-selections, feature/paint-v037-selection-outlines, feature/paint-v038-marching-ants]
+    branches: [main, feature/paint-v035-invert-selection, feature/paint-v036-combine-selections, feature/paint-v037-selection-outlines, feature/paint-v038-marching-ants, feature/paint-v039-selection-animation-toggle]
   pull_request:
 jobs:
   checks:
@@ -11,7 +11,7 @@ jobs:
       - name: Preparar Lua e LÖVE
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y lua5.4 love xvfb
+          sudo apt-get install -y lua5.4 luajit love xvfb
       - name: Inspecionar arquivos e sintaxe Lua
         shell: bash
         run: |
@@ -33,12 +33,32 @@ jobs:
           test -f tests/test_selection_combine_v036.lua
           test -f tests/test_selection_outline_v037.lua
           test -f tests/test_selection_ants_v038.lua
+          test -f tests/test_selection_pause_v039.lua
+          test -f tests/test_selection_contract_integration.lua
+          test -f tests/test_selection_operation_lock_v039.lua
+          test -f tests/test_selection_fill_lock_v039.lua
+          test -f tests/test_selection_lifecycle_v039.lua
+          test -f tests/test_document_switch_v039.lua
+          test -f tests/test_layer_sync_during_jobs_v039.lua
+          test -f tests/test_png_export_operation_lock_v039.lua
+          test -f tests/test_pending_preview_sync_v039.lua
+          test -f tests/test_selection_clear_during_drag_v039.lua
+          test -f tests/test_png_import_pending_commit_v039.lua
+          test -f tests/test_reload_during_operations_v039.lua
+          test -f tests/test_selection_finish_race_v039.lua
+          test -f tests/test_stroke_pending_layer_sync_v039.lua
+          test -f tests/test_save_pending_sync_v039.lua
+          test -f tests/test_paint_tool_operation_lock_v039.lua
+          test -f tests/test_selection_contract_love.lua
+          test -f tests/test_editor_preferences.lua
           test -f tests/test_selection_ants_love_v038.lua
           test -f app/selection_ants.lua
           test -f docs/INVERSAO_SELECAO_v035.md
           test -f docs/COMBINACAO_SELECOES_v036.md
           test -f docs/CONTORNOS_SELECAO_v037.md
           test -f docs/CONTORNOS_ANIMADOS_v038.md
+          test -f docs/PAUSA_CONTORNOS_v039.md
+          test -f docs/REVISAO_INTEGRACAO_v039.md
           test -f docs/ALCAS_TRANSFORMACAO_v034.md
           test -f docs/TRANSFORMACAO_SUAVE_v033.md
           test -f docs/ROTACAO_PNG_v032.md
@@ -47,12 +67,24 @@ jobs:
           test -f assets/icons/png/paintbrush.png
           test ! -f .gitmodules
           while IFS= read -r f; do luac5.4 -p "$f"; done < <(find core app src tests -name '*.lua' -type f | sort)
+      # luac5.4 valida a sintaxe, mas não detecta o teto de 60 upvalues
+      # do LuaJIT usado pelo runtime LÖVE 11.5 distribuído ao usuário.
+      - name: Compilar código da aplicação com LuaJIT real
+        shell: bash
+        run: |
+          luajit -b main.lua /dev/null
+          while IFS= read -r f; do
+            luajit -b "$f" /dev/null
+          done < <(find core app src -name '*.lua' -type f | sort)
       - name: Bateria completa do núcleo e integração (mocks)
         run: |
-          lua5.4 tests/test_core.lua > core-results.log
+          if ! lua5.4 tests/test_core.lua > core-results.log 2>&1; then
+            tail -n 100 core-results.log
+            exit 1
+          fi
           tail -n 5 core-results.log
           grep -Eq '^[0-9]+ passou, 0 falhou$' core-results.log
-          awk '/passou, 0 falhou/ {if ($1<1288) exit 1; ok=1} END {if (!ok) exit 1}' core-results.log
+          awk '/passou, 0 falhou/ {if ($1<1724) exit 1; ok=1} END {if (!ok) exit 1}' core-results.log
       - name: Testes do modelo e navegação
         run: |
           lua5.4 scripts/smoke-core.lua
@@ -64,6 +96,7 @@ jobs:
           lua5.4 tests/test_gallery.lua
           lua5.4 tests/test_gallery_storage.lua
           lua5.4 tests/test_color_state.lua
+          lua5.4 tests/test_editor_preferences.lua
       - name: Inicializar interface no LÖVE 11.5
         run: timeout 60s xvfb-run -a env PAINT_LUA_SMOKE=1 PAINT_LUA_SCREEN=editor love .
       - name: Testar pixels, transformação, undo/redo e NPNT1–NPNT5 no LÖVE
@@ -80,6 +113,10 @@ jobs:
         run: timeout 75s xvfb-run -a env PAINT_LUA_SELECTION_COMBINE_E2E=1 love .
       - name: E2E de contornos e shader de seleção animada na interface
         run: timeout 75s xvfb-run -a env PAINT_LUA_SELECTION_OUTLINE_E2E=1 love .
+      - name: E2E da pausa persistente dos contornos em duas execuções LÖVE
+        run: |
+          timeout 75s xvfb-run -a env PAINT_LUA_SELECTION_PAUSE_E2E=create love .
+          timeout 75s xvfb-run -a env PAINT_LUA_SELECTION_PAUSE_E2E=check love .
       - name: E2E de arraste, setas e rolagem do painel Layer
         run: timeout 60s xvfb-run -a env PAINT_LUA_LAYER_E2E=1 love .
       - name: Inspecionar janela avançada no LÖVE
@@ -88,34 +125,172 @@ jobs:
         run: |
           timeout 70s xvfb-run -a env PAINT_LUA_GALLERY_PERSIST_E2E=create love .
           timeout 70s xvfb-run -a env PAINT_LUA_GALLERY_PERSIST_E2E=check love .
-      - name: Empacotar v0.38 com fontes e .bat para Windows
+      - name: Empacotar v0.39 com fontes e .bat para Windows
         shell: bash
         run: |
-          git archive --format=zip --output=Paint-Lua-v0.38-Windows.zip HEAD
-          unzip -tq Paint-Lua-v0.38-Windows.zip
-          unzip -Z1 Paint-Lua-v0.38-Windows.zip | grep -q '^core/selection.lua$'
-          unzip -Z1 Paint-Lua-v0.38-Windows.zip | grep -q '^core/transform.lua$'
-          unzip -Z1 Paint-Lua-v0.38-Windows.zip | grep -q '^core/thumbnail.lua$'
-          unzip -Z1 Paint-Lua-v0.38-Windows.zip | grep -q '^src/gallery_storage.lua$'
-          unzip -Z1 Paint-Lua-v0.38-Windows.zip | grep -q '^tests/test_gallery_storage.lua$'
-          unzip -Z1 Paint-Lua-v0.38-Windows.zip | grep -q '^tests/test_core.lua$'
-          unzip -Z1 Paint-Lua-v0.38-Windows.zip | grep -q '^src/png_import.lua$'
-          unzip -Z1 Paint-Lua-v0.38-Windows.zip | grep -q '^tests/test_png_import_v029.lua$'
-          unzip -Z1 Paint-Lua-v0.38-Windows.zip | grep -q '^tests/test_png_interpolation_v031.lua$'
-          unzip -Z1 Paint-Lua-v0.38-Windows.zip | grep -q '^tests/test_png_rotation_aa_v032.lua$'
-          unzip -Z1 Paint-Lua-v0.38-Windows.zip | grep -q '^tests/test_transform_smooth_v033.lua$'
-          unzip -Z1 Paint-Lua-v0.38-Windows.zip | grep -q '^tests/test_transform_handles_v034.lua$'
-          unzip -Z1 Paint-Lua-v0.38-Windows.zip | grep -q '^tests/test_selection_invert_v035.lua$'
-          unzip -Z1 Paint-Lua-v0.38-Windows.zip | grep -q '^tests/test_selection_combine_v036.lua$'
-          unzip -Z1 Paint-Lua-v0.38-Windows.zip | grep -q '^tests/test_selection_outline_v037.lua$'
-          unzip -Z1 Paint-Lua-v0.38-Windows.zip | grep -q '^tests/test_selection_ants_v038.lua$'
-          unzip -Z1 Paint-Lua-v0.38-Windows.zip | grep -q '^tests/test_selection_ants_love_v038.lua$'
-          unzip -Z1 Paint-Lua-v0.38-Windows.zip | grep -q '^app/selection_ants.lua$'
-          unzip -Z1 Paint-Lua-v0.38-Windows.zip | grep -q '^testar.bat$'
-          sha256sum Paint-Lua-v0.38-Windows.zip
+          git archive --format=zip --output=Paint-Lua-v0.39-Windows.zip HEAD
+          unzip -tq Paint-Lua-v0.39-Windows.zip
+          unzip -Z1 Paint-Lua-v0.39-Windows.zip | grep -q '^core/selection.lua$'
+          unzip -Z1 Paint-Lua-v0.39-Windows.zip | grep -q '^core/transform.lua$'
+          unzip -Z1 Paint-Lua-v0.39-Windows.zip | grep -q '^core/thumbnail.lua$'
+          unzip -Z1 Paint-Lua-v0.39-Windows.zip | grep -q '^src/gallery_storage.lua$'
+          unzip -Z1 Paint-Lua-v0.39-Windows.zip | grep -q '^tests/test_gallery_storage.lua$'
+          unzip -Z1 Paint-Lua-v0.39-Windows.zip | grep -q '^tests/test_core.lua$'
+          unzip -Z1 Paint-Lua-v0.39-Windows.zip | grep -q '^src/png_import.lua$'
+          unzip -Z1 Paint-Lua-v0.39-Windows.zip | grep -q '^tests/test_png_import_v029.lua$'
+          unzip -Z1 Paint-Lua-v0.39-Windows.zip | grep -q '^tests/test_png_interpolation_v031.lua$'
+          unzip -Z1 Paint-Lua-v0.39-Windows.zip | grep -q '^tests/test_png_rotation_aa_v032.lua$'
+          unzip -Z1 Paint-Lua-v0.39-Windows.zip | grep -q '^tests/test_transform_smooth_v033.lua$'
+          unzip -Z1 Paint-Lua-v0.39-Windows.zip | grep -q '^tests/test_transform_handles_v034.lua$'
+          unzip -Z1 Paint-Lua-v0.39-Windows.zip | grep -q '^tests/test_selection_invert_v035.lua$'
+          unzip -Z1 Paint-Lua-v0.39-Windows.zip | grep -q '^tests/test_selection_combine_v036.lua$'
+          unzip -Z1 Paint-Lua-v0.39-Windows.zip | grep -q '^tests/test_selection_outline_v037.lua$'
+          unzip -Z1 Paint-Lua-v0.39-Windows.zip | grep -q '^tests/test_selection_ants_v038.lua$'
+          unzip -Z1 Paint-Lua-v0.39-Windows.zip | grep -q '^tests/test_selection_ants_love_v038.lua$'
+          unzip -Z1 Paint-Lua-v0.39-Windows.zip | grep -q '^tests/test_selection_pause_v039.lua$'
+          unzip -Z1 Paint-Lua-v0.39-Windows.zip | grep -q '^tests/test_selection_contract_integration.lua$'
+          unzip -Z1 Paint-Lua-v0.39-Windows.zip | grep -q '^tests/test_selection_operation_lock_v039.lua$'
+          unzip -Z1 Paint-Lua-v0.39-Windows.zip | grep -q '^tests/test_selection_fill_lock_v039.lua$'
+          unzip -Z1 Paint-Lua-v0.39-Windows.zip | grep -q '^tests/test_selection_lifecycle_v039.lua$'
+          unzip -Z1 Paint-Lua-v0.39-Windows.zip | grep -q '^tests/test_document_switch_v039.lua$'
+          unzip -Z1 Paint-Lua-v0.39-Windows.zip | grep -q '^tests/test_layer_sync_during_jobs_v039.lua$'
+          unzip -Z1 Paint-Lua-v0.39-Windows.zip | grep -q '^tests/test_png_export_operation_lock_v039.lua$'
+          unzip -Z1 Paint-Lua-v0.39-Windows.zip | grep -q '^tests/test_pending_preview_sync_v039.lua$'
+          unzip -Z1 Paint-Lua-v0.39-Windows.zip | grep -q '^tests/test_selection_clear_during_drag_v039.lua$'
+          unzip -Z1 Paint-Lua-v0.39-Windows.zip | grep -q '^tests/test_png_import_pending_commit_v039.lua$'
+          unzip -Z1 Paint-Lua-v0.39-Windows.zip | grep -q '^tests/test_reload_during_operations_v039.lua$'
+          unzip -Z1 Paint-Lua-v0.39-Windows.zip | grep -q '^tests/test_selection_finish_race_v039.lua$'
+          unzip -Z1 Paint-Lua-v0.39-Windows.zip | grep -q '^tests/test_stroke_pending_layer_sync_v039.lua$'
+          unzip -Z1 Paint-Lua-v0.39-Windows.zip | grep -q '^tests/test_save_pending_sync_v039.lua$'
+          unzip -Z1 Paint-Lua-v0.39-Windows.zip | grep -q '^tests/test_paint_tool_operation_lock_v039.lua$'
+          unzip -Z1 Paint-Lua-v0.39-Windows.zip | grep -q '^tests/test_selection_contract_love.lua$'
+          unzip -Z1 Paint-Lua-v0.39-Windows.zip | grep -q '^src/editor_preferences.lua$'
+          unzip -Z1 Paint-Lua-v0.39-Windows.zip | grep -q '^app/selection_ants.lua$'
+          unzip -Z1 Paint-Lua-v0.39-Windows.zip | grep -q '^docs/REVISAO_INTEGRACAO_v039.md$'
+          unzip -Z1 Paint-Lua-v0.39-Windows.zip | grep -q '^testar.bat$'
+          unzip -Z1 Paint-Lua-v0.39-Windows.zip | grep -q '^scripts/windows-love-e2e.ps1$'
+          sha256sum Paint-Lua-v0.39-Windows.zip
       - name: Disponibilizar ZIP
         uses: actions/upload-artifact@v4
         with:
-          name: Paint-Lua-v0.38-Windows
-          path: Paint-Lua-v0.38-Windows.zip
+          name: Paint-Lua-v0.39-Windows
+          path: Paint-Lua-v0.39-Windows.zip
           if-no-files-found: error
+
+  windows_release:
+    name: Verificar ZIP e inicializador no Windows
+    needs: checks
+    runs-on: windows-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - name: Baixar exatamente o ZIP gerado pela CI
+        uses: actions/download-artifact@v4
+        with:
+          name: Paint-Lua-v0.39-Windows
+          path: dist
+      - name: Baixar runtime LÖVE 11.5 oficial e conferir SHA-256
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $ProgressPreference = 'SilentlyContinue'
+          $zip = Join-Path $env:RUNNER_TEMP 'love-11.5-win64.zip'
+          $url = 'https://github.com/love2d/love/releases/download/11.5/love-11.5-win64.zip'
+          Invoke-WebRequest -Uri $url -OutFile $zip -MaximumRetryCount 3
+          # Hash do asset atual confirmado também pelo manifesto Scoop (love 11.5).
+          $expected = 'ba6e56be2685e53c817749c4a5007f51137136fe5a3ab64920508babc2e74369'
+          $actual = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actual -ne $expected) {
+            throw "LÖVE 11.5 SHA-256 incorreto: $actual"
+          }
+          $folder = Join-Path $env:RUNNER_TEMP 'love-11.5-portable'
+          Expand-Archive -LiteralPath $zip -DestinationPath $folder -Force
+          $binary = Get-ChildItem $folder -Recurse -File -Filter love.exe |
+            Select-Object -First 1
+          if (-not $binary) { throw 'love.exe não encontrado no runtime oficial' }
+          "LOVE11_EXE=$($binary.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          # love.exe usa o subsistema gráfico do Windows e não oferece
+          # exit code síncrono no PowerShell. Testar o irmão de console.
+          $console = Get-ChildItem $folder -Recurse -File -Filter lovec.exe |
+            Select-Object -First 1
+          if (-not $console) { throw 'lovec.exe ausente no runtime oficial' }
+          & $console.FullName --version
+          if ($LASTEXITCODE -ne 0) { throw "lovec.exe --version falhou: $LASTEXITCODE" }
+          "LOVEC11_EXE=$($console.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+      - name: Extrair pacote entregue e executar testar.bat no Windows
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $zip = Join-Path (Get-Location) 'dist/Paint-Lua-v0.39-Windows.zip'
+          if (-not (Test-Path -LiteralPath $zip)) { throw "ZIP não encontrado: $zip" }
+          $dest = Join-Path (Get-Location) 'win-release'
+          Expand-Archive -LiteralPath $zip -DestinationPath $dest -Force
+          $env:PAINT_LUA_VERIFY_ONLY = '1'
+          $env:PAINT_LUA_NO_PAUSE = '1'
+          Push-Location $dest
+          try {
+            & cmd.exe /d /c "call testar.bat"
+            if ($LASTEXITCODE -ne 0) {
+              throw "testar.bat falhou em modo de verificação: $LASTEXITCODE"
+            }
+            # O mesmo launcher deve recusar um ZIP incompleto, não encerrar com 0.
+            $script = Join-Path 'app' 'selection_ants.lua'
+            Rename-Item -LiteralPath $script -NewName 'selection_ants.lua.hidden'
+            try {
+              # Um exit 5 é o resultado esperado; usar Start-Process
+              # evita que pwsh com ErrorActionPreference=Stop o converta
+              # automaticamente em erro antes de examinarmos o código.
+              $failed = Start-Process -FilePath cmd.exe -Wait -PassThru -NoNewWindow `
+                -ArgumentList '/d /c "call testar.bat"'
+              if ($failed.ExitCode -ne 5) {
+                throw "testar.bat não detectou asset ausente: $($failed.ExitCode)"
+              }
+            } finally {
+              Rename-Item -LiteralPath (Join-Path 'app' 'selection_ants.lua.hidden') -NewName 'selection_ants.lua'
+            }
+          } finally {
+            Pop-Location
+          }
+      - name: Confirmar pasta de extração pronta para uso
+        shell: pwsh
+        run: |
+          $paths = @(
+            'win-release/testar.bat',
+            'win-release/main.lua',
+            'win-release/conf.lua',
+            'win-release/core/selection.lua',
+            'win-release/src/editor_preferences.lua',
+            'win-release/app/ibis_main.lua',
+            'win-release/app/selection_ants.lua',
+            'win-release/assets/icons/png/paintbrush.png'
+          )
+          foreach ($path in $paths) {
+            if (-not (Test-Path -LiteralPath $path)) {
+              throw "Arquivo ausente no ZIP final: $path"
+            }
+          }
+          # Validar sintaxe do script extraído antes de tentar abrir janela.
+          $tokens = $null
+          $parseErrors = $null
+          $script = Join-Path (Get-Location) 'win-release/scripts/windows-love-e2e.ps1'
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            $script, [ref]$tokens, [ref]$parseErrors) | Out-Null
+          if ($parseErrors.Count -ne 0) {
+            throw "Script de teste Windows inválido: $($parseErrors[0])"
+          }
+          Write-Output 'PASS: ZIP Windows extraído, LOVE 11.5 validado, testar.bat e falha controlada'
+      - name: Inicialização real da interface no LÖVE 11.5 Windows
+        shell: pwsh
+        run: |
+          & ./win-release/scripts/windows-love-e2e.ps1 `
+            -LoveConsole $env:LOVEC11_EXE -ProjectDirectory './win-release' `
+            -Mode smoke -TimeoutSeconds 35 -AllowMissingGraphics
+      - name: Integração real NPNT, seleção e GPU no LÖVE 11.5 Windows
+        if: env.PAINT_LUA_GRAPHICS_UNAVAILABLE != '1'
+        shell: pwsh
+        run: |
+          & ./win-release/scripts/windows-love-e2e.ps1 `
+            -LoveConsole $env:LOVEC11_EXE -ProjectDirectory './win-release' `
+            -Mode bridge -TimeoutSeconds 120
+
