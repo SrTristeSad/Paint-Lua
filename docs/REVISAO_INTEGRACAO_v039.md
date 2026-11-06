@@ -488,3 +488,22 @@ externo antes/depois de pixels provisórios, rollback,
 History.stroke externo, job interno, prévias, retomada do
 pincel e do balde com undo/redo e documento/tela inválidos.
 Os formatos NPNT e PNG não mudaram.
+
+## Falha na confirmação de pincelada antes de persistir (revisão do PR #6)
+
+`Bridge:finish(false)` capturava uma exceção de `Stroke:finish`,
+tentava cancelar a transação e apenas registrava uma mensagem de status.
+Os chamadores continuavam normalmente, podendo salvar NPNT, exportar PNG
+ou avançar o histórico apesar de a pincelada não ter sido confirmada.
+
+Agora uma **falha explícita** de finalização é propagada como retorno
+`false, motivo`. `Bridge:save` e `Bridge:exportPNG` interrompem a
+operação **antes de escrever arquivos**; `Bridge:historyStep` não
+executa undo/redo nessa situação. Finalizações normais mantêm o retorno
+anterior, inclusive a API de `Bridge:finish` usada pela interface.
+O cancelamento/rollback da pincelada continua sendo tentado após a falha.
+
+`tests/test_stroke_finish_failure_v039.lua` injeta uma falha na
+finalização de um `Stroke` real e verifica NPNT anterior intacto,
+ausência de PNG novo, histórico inalterado, rollback e recuperação
+posterior por salvamento/exportação/desfazer. Não altera NPNT1–NPNT5.
