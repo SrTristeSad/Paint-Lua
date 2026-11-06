@@ -345,3 +345,16 @@ e ignorar falhas. `Bridge:save()` sem modelo permanece
 compatível para integrações já sincronizadas. Não gravar
 propriedades antigas se estiverem pendentes.
 Teste: `tests/test_save_pending_sync_v039.lua` (33).
+
+### Bloqueio comum de pintura e conta-gotas (v0.39)
+
+`Bridge:press`, `Bridge:pick` e `Bridge:bucket` devem
+recusar quando `self.stroke`, `self.job`, `self.transform`,
+`self.pngPreview`, `self.selectionDrag`, `doc.history.stroke`
+ou `doc.history._fillLock` estiverem ativos. Não iniciar uma
+operação secundária ao trocar a ferramenta durante a seleção;
+nunca amostrar pixels provisórios do balde externo. Para APIs
+diretas de pick/bucket, exigir modelo ligado à obra do editor.
+A recusa não pode criar histórico, consumir arraste ou jobs;
+depois da liberação, operações normais retomam. Regressão:
+`tests/test_paint_tool_operation_lock_v039.lua` (41).

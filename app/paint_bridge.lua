@@ -481,7 +481,26 @@ function Bridge:point(model,view,prefs,uiScale,W,H,rx,ry)
   return px,py
 end
 
+-- Trocar de ferramenta no meio de um arraste não autoriza uma segunda
+-- operação. Bloquear também jobs/gestos iniciados diretamente no motor:
+-- o conta-gotas nunca deve amostrar os pixels ainda provisórios do balde.
+local function canUsePaintTool(self,model,requireDocument)
+  local h=self.doc and self.doc.history
+  if self.stroke or self.job or self.transform or self.pngPreview
+    or self.selectionDrag or (h and (h._fillLock or h.stroke)) then
+    self.status='Conclua ou cancele a operação antes de pintar ou coletar cor'
+    return false
+  end
+  if requireDocument and (not self.doc or not model or
+    model.screen~='editor' or model.document~=self.modelDocument) then
+    self.status='Abra a obra correta antes de usar a ferramenta'
+    return false
+  end
+  return true
+end
+
 function Bridge:pick(model,px,py)
+  if not canUsePaintTool(self,model,true) then return false end
   local img=Composite.flattenRegion(self.doc,math.floor(px),math.floor(py),1,1)
   local r,g,b,a=img:getPixel(0,0)
   if a<=0 then self.status='Conta-gotas: pixel transparente';return false end
@@ -492,6 +511,7 @@ end
 
 function Bridge:bucket(model,px,py,opacity)
   if self.job then self.status='Balde ocupado';return false end
+  if not canUsePaintTool(self,model,true) then return false end
   local entry=model:active_layer()
   if entry.locked then self.status='Camada bloqueada';return false end
   if entry.alpha_lock then
@@ -509,11 +529,13 @@ function Bridge:bucket(model,px,py,opacity)
 end
 
 function Bridge:press(model,view,prefs,uiScale,W,H,rx,ry,opacity)
-  if self.stroke or self.job or self.transform or self.pngPreview then return false end
   if model.active_tool~='brush' and model.active_tool~='eraser'
     and model.active_tool~='bucket' and model.active_tool~='eyedropper' then
     return false
   end
+  -- Antes até de calcular o ponto, impedir intercalar pintura ou amostragem
+  -- com seleção, prévias e jobs que ainda detêm o histórico.
+  if not canUsePaintTool(self,model,false) then return false end
   local px,py=self:point(model,view,prefs,uiScale,W,H,rx,ry)
   if not px then return false end
   if model.active_tool=='eyedropper' then return self:pick(model,px,py) end

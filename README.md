@@ -476,3 +476,13 @@ propriedades ainda estiverem desatualizadas no arquivo.
 Preenchimentos externos ou pinceladas não confirmadas por
 outro componente continuam bloqueando o salvamento até
 concluir/cancelar. Regressões em `tests/test_save_pending_sync_v039.lua`.
+
+### Ferramentas durante seleção ou preenchimento
+
+Pincel, borracha, balde e conta-gotas aguardam o fim de um
+retângulo/laço ou de outra operação pendente. Em particular,
+o conta-gotas não coleta cores de um preenchimento cooperativo
+que ainda pode ser cancelado. Depois de confirmar ou cancelar
+o trabalho, as ferramentas voltam a funcionar normalmente,
+sem históricos concorrentes. Cobertura:
+`tests/test_paint_tool_operation_lock_v039.lua`.

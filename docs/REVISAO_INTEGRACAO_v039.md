@@ -459,3 +459,32 @@ com NPNT real decodificado, Ctrl+S e pincelada real, propriedades
 e camada ativa, histórico, balde externo antes/depois de pixels
 parciais, rollback, pincelada externa, prévias, modelo antigo,
 galeria e compatibilidade com `save()`.
+
+## Entrada das ferramentas sob seleção pendente ou Fill externo (v0.39)
+
+`Bridge:press` não considerava `selectionDrag` nem o token
+`doc.history._fillLock` antes de iniciar pincel, borracha,
+balde ou conta-gotas. Se a ferramenta fosse trocada no meio de um
+retângulo/laço, uma segunda operação poderia começar sobre a obra
+enquanto o primeiro gesto continuava aberto. Se um
+`Fill.newJob` criado fora da ponte pintasse pixels ainda
+provisórios, o conta-gotas podia **amostrar cores não confirmadas**
+por não passar pela proteção de histórico.
+
+Um guarda único `canUsePaintTool` agora atende o evento
+`press` e também as APIs diretas `pick`/`bucket`. Ele recusa
+um gesto em andamento (pincel, seleção, transformação, prévia PNG
+ou job da ponte), além de `doc.history.stroke` e
+`doc.history._fillLock` vindos do motor. A recusa acontece
+antes de converter coordenadas no evento de mouse e antes de
+compor qualquer pixel no conta-gotas ou adquirir o token do
+balde. As APIs diretas também não trabalham em outro documento
+ou fora do editor.
+
+`tests/test_paint_tool_operation_lock_v039.lua` registra
+**41 verificações**, cobrindo troca de ferramenta durante
+retângulo, API direta, conta-gotas sem leitura durante balde
+externo antes/depois de pixels provisórios, rollback,
+History.stroke externo, job interno, prévias, retomada do
+pincel e do balde com undo/redo e documento/tela inválidos.
+Os formatos NPNT e PNG não mudaram.
