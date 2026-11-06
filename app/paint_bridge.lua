@@ -1354,6 +1354,12 @@ end
 -- A exportação nunca modifica a pintura nem substitui um PNG existente.
 function Bridge:exportPNG(model)
   if not self.doc then return nil,'nenhum documento aberto' end
+  -- Uma chamada de outra obra não pode trocar o documento via sync,
+  -- nem exportar uma tela nova no lugar da pintura atualmente anexada.
+  if model and (model.screen~='editor' or model.document~=self.modelDocument) then
+    self.status='Documento alterado antes de exportar'
+    return nil,self.status
+  end
   if self.transform or self.job or self.selectionDrag or self.pngPreview
     or self.doc.history._fillLock or
     (self.doc.history.stroke and not self.stroke) then
