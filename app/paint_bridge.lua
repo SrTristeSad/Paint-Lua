@@ -726,17 +726,34 @@ function Bridge:finishSelection(model,view,prefs,uiScale,W,H,rx,ry)
     self.status='Conclua a operação atual antes de confirmar a seleção'
     return false
   end
-  self.selectionDrag=nil
+  -- Construir a seleção antes de descartar o arraste. Uma falha na
+  -- validação do laço ou no limite da combinação não deve consumir o
+  -- gesto, nem impedir que o usuário o cancele com Escape.
   local selection
   if drag.kind=='selection_rect' then
-    selection=Selection.rect(self.doc,drag.startX,drag.startY,drag.x,drag.y)
+    local ok,value=pcall(Selection.rect,doc,drag.startX,drag.startY,drag.x,drag.y)
+    if not ok then self.status='Retângulo inválido: '..tostring(value);return false end
+    selection=value
   elseif drag.points and #drag.points>=3 then
-    local ok,value=pcall(Selection.polygon,self.doc,drag.points)
+    local ok,value=pcall(Selection.polygon,doc,drag.points)
     if not ok then self.status='Laço inválido: '..tostring(value);return false end
     selection=value
   end
-  if not selection then self.status='Seleção vazia';return false end
-  return self:combineSelection(selection,drag.mode)
+  if not selection then
+    self.selectionDrag=nil
+    self.status='Seleção vazia'
+    return false
+  end
+  -- combineSelection protege contra gestos concorrentes; liberar o
+  -- arraste apenas durante a confirmação e restaurá-lo se ela falhar.
+  self.selectionDrag=nil
+  local ok,changed=pcall(self.combineSelection,self,selection,drag.mode)
+  if not ok or not changed then
+    self.selectionDrag=drag
+    if not ok then self.status='Seleção: '..tostring(changed) end
+    return false
+  end
+  return true
 end
 
 -- A prévia retém o ImageData da camada ativa; o documento só muda ao aplicar.
