@@ -530,3 +530,27 @@ em um documento 4096×4096 sem rasterizar a tela inteira, recuperação
 após cancelamento, retângulo/laço inválidos, confirmação posterior e
 undo/redo. O núcleo de seleção, o limite de processamento e o formato
 NPNT1–NPNT5 não foram alterados.
+
+## Troca de documento durante transações externas (PR #6)
+
+Um preenchimento `Fill.newJob` iniciado diretamente no motor conserva
+`doc.history._fillLock`, mas não possui referência em `Bridge.job`.
+Antes desta revisão, `Bridge:sync(model)` ao criar uma tela nova e
+`Bridge:attachDocument(model,doc,id)` ao abrir outra obra podiam
+descartar as referências da ponte enquanto esse job ainda alterava
+pixels provisórios da obra anterior. O mesmo era possível com uma
+`History.begin` externa à ponte.
+
+As duas vias de troca agora recusam a substituição antes de limpar
+caches, seleção ou referências quando uma transação **não controlada
+pela ponte** estiver aberta. A mensagem pede concluir ou cancelar a
+operação externa. A obra e seu histórico permanecem disponíveis
+para que o dono da operação a encerre; depois disso, a troca
+prossegue normalmente.
+
+Os preenchimentos pertencentes à própria ponte continuam sendo
+cancelados por `Bridge:cancelJob`, inclusive com rollback, como
+antes. Não há mudança em NPNT1–NPNT5 nem na política da galeria
+para operações pertencentes à ponte. Regressão:
+`tests/test_external_transaction_document_switch_v039.lua`,
+executada na suíte principal.
