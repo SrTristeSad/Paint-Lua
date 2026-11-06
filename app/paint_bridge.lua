@@ -1030,6 +1030,9 @@ function Bridge:finish(cancel)
   if not ok then
     self.status="Finalizacao: "..tostring(err)
     pcall(s.cancel,s)
+    -- A falha não pode ser confundida com pincelada confirmada por
+    -- Ctrl+S, exportação PNG ou desfazer/refazer.
+    return false,self.status
   end
 end
 
@@ -1145,7 +1148,8 @@ function Bridge:save(model)
   end
   -- A pincelada pertencente à ponte pode ser confirmada ao salvar, como
   -- antes; só depois disso é seguro aplicar as edições pendentes do painel.
-  self:finish(false)
+  local finalized,finishErr=self:finish(false)
+  if finalized==false then return nil,finishErr end
   if model and not self:sync(model) then
     return nil,self.status or 'não foi possível sincronizar as camadas antes de salvar'
   end
@@ -1366,7 +1370,8 @@ function Bridge:exportPNG(model)
     self.status='Conclua ou cancele a operação antes de exportar'
     return nil,self.status
   end
-  self:finish(false)
+  local finalized,finishErr=self:finish(false)
+  if finalized==false then return nil,finishErr end
   -- Se alterações de camada ainda não puderem ser sincronizadas,
   -- não exportar uma composição desatualizada.
   if model and not self:sync(model) then
@@ -1424,7 +1429,7 @@ function Bridge:historyStep(model,redo)
     self.status='Finalize o preenchimento antes do histórico'
     return false
   end
-  self:finish(false)
+  if self:finish(false)==false then return false end
   local doc=self:sync(model)
   if not doc then return false end
   local fn=redo and History.redo or History.undo
