@@ -185,6 +185,9 @@ return function(check)
   -- Com as operações concluídas, o pincel volta a gravar uma única
   -- ação e o balde pode começar/cancelar sem alterar pixels anteriores.
   model:set_tool('brush')
+  -- Um pincel de 1 px centrado na borda do texel pode não carimbar
+  -- cobertura alguma; este cenário exige pixels reais para testar undo.
+  model:set_brush_size(8)
   model:set_color(0,0,255)
   check('ferramentas lock: pincel volta a começar após liberar locks',
     press() and bridge.stroke~=nil and doc.history.stroke~=nil)
