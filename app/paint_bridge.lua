@@ -82,12 +82,27 @@ function Bridge:cancelJob()
   end
 end
 
+-- Uma transação aberta diretamente no motor não pertence à ponte:
+-- sem a referência ao Job externo, trocar de obra não permite cancelá-lo.
+-- Os preenchimentos da própria ponte continuam canceláveis em cancelJob.
+local function hasExternalTransaction(self)
+  local history=self.doc and self.doc.history
+  if not history then return false end
+  local ownFill=self.job and self.jobKind=='fill'
+  return (history._fillLock and not ownFill)
+    or (history.stroke and not ownFill and not self.stroke)
+end
+
 -- Aplica somente diferenças efetivas. Uma interação de camada produz um
 -- snapshot estrutural; redesenhar a UI não insere histórico adicional.
 function Bridge:sync(model)
   if model.screen~='editor' or not model.document then return nil end
   local fresh = self.doc==nil or self.modelDocument~=model.document
   if fresh then
+    if hasExternalTransaction(self) then
+      self.status='Conclua ou cancele a operação externa antes de trocar de obra'
+      return nil
+    end
     self:finish(true)
     self:cancelJob()
     self:dropImages()
@@ -1117,6 +1132,10 @@ end
 -- atual caso o arquivo solicitado não tenha podido ser aberto.
 function Bridge:attachDocument(model,doc,id)
   assert(doc and doc.w and doc.h,'documento inválido')
+  if hasExternalTransaction(self) then
+    self.status='Conclua ou cancele a operação externa antes de trocar de obra'
+    return false
+  end
   if id then GalleryStorage.artworkPath(id) end
   self:cancelTransform()
   self:cancelPNGImport()
