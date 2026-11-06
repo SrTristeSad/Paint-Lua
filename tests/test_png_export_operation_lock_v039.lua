@@ -104,6 +104,23 @@ return function(check)
     bridge:exportPNG(model)=='exports/obra-atual-3.png'
       and count()==3 and #doc.history.undo==undoBefore)
 
+  -- Uma chamada com outro documento não pode substituir a obra da
+  -- ponte durante a sincronização nem gerar um PNG de tela vazia.
+  local originalDocument=model.document
+  local oldDoc=bridge.doc
+  local previousCount=count()
+  model.document={width=12,height=12}
+  out,why=bridge:exportPNG(model)
+  check('PNG lock: modelo de outra obra é recusado antes da sincronização',
+    out==nil and type(why)=='string' and count()==previousCount)
+  check('PNG lock: recusa preserva documento e histórico da obra anterior',
+    bridge.doc==oldDoc and bridge.modelDocument==originalDocument
+      and #doc.history.undo==undoBefore)
+  model.document=originalDocument
+  check('PNG lock: após restaurar modelo a exportação é permitida',
+    bridge:exportPNG(model)=='exports/obra-atual-4.png'
+      and count()==previousCount+1 and bridge.doc==oldDoc)
+
   -- A sincronização deve ser verificada. Estar fora do editor
   -- não pode produzir um PNG da antiga obra por engano.
   model:open_gallery()
