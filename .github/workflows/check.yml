@@ -11,7 +11,7 @@ jobs:
       - name: Preparar Lua e LÖVE
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y lua5.4 love xvfb
+          sudo apt-get install -y lua5.4 luajit love xvfb
       - name: Inspecionar arquivos e sintaxe Lua
         shell: bash
         run: |
@@ -67,6 +67,15 @@ jobs:
           test -f assets/icons/png/paintbrush.png
           test ! -f .gitmodules
           while IFS= read -r f; do luac5.4 -p "$f"; done < <(find core app src tests -name '*.lua' -type f | sort)
+      # luac5.4 valida a sintaxe, mas não detecta o teto de 60 upvalues
+      # do LuaJIT usado pelo runtime LÖVE 11.5 distribuído ao usuário.
+      - name: Compilar código da aplicação com LuaJIT real
+        shell: bash
+        run: |
+          luajit -b main.lua /dev/null
+          while IFS= read -r f; do
+            luajit -b "$f" /dev/null
+          done < <(find core app src -name '*.lua' -type f | sort)
       - name: Bateria completa do núcleo e integração (mocks)
         run: |
           if ! lua5.4 tests/test_core.lua > core-results.log 2>&1; then
