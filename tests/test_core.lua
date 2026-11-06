@@ -1883,6 +1883,7 @@ require('tests.test_save_pending_sync_v039')(check)
 require('tests.test_paint_tool_operation_lock_v039')(check)
 require('tests.test_stroke_finish_failure_v039')(check)
 require('tests.test_selection_commit_rejection_v039')(check)
+require('tests.test_external_transaction_document_switch_v039')(check)
 
 print(string.format("\n%d passou, %d falhou", passed, failed))
 if failed > 0 then os.exit(1) end
