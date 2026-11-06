@@ -507,3 +507,26 @@ O cancelamento/rollback da pincelada continua sendo tentado após a falha.
 finalização de um `Stroke` real e verifica NPNT anterior intacto,
 ausência de PNG novo, histórico inalterado, rollback e recuperação
 posterior por salvamento/exportação/desfazer. Não altera NPNT1–NPNT5.
+
+## Seleção em arraste após recusa de combinação (revisão do PR #6)
+
+Ao soltar um retângulo ou laço no modo Adicionar/Subtrair/Interseção,
+`Bridge:finishSelection` descartava `selectionDrag` **antes** de validar
+a geometria e combinar a máscara. Se o limite de 2 milhões de pixels /
+256 tiles fosse excedido (ou se o laço tivesse pontos inválidos), não
+havia seleção confirmada, mas o gesto já estava perdido.
+
+Agora a geometria é construída com tratamento de erro antes de liberar
+o arraste. Durante a aplicação o gesto é liberado temporariamente,
+mantendo a proteção contra mutações concorrentes de `combineSelection`.
+Se a operação for recusada, o arraste, o modo capturado, a seleção
+anterior e as pilhas de undo/redo permanecem disponíveis. Escape segue
+cancelando o gesto na interface. Se a geometria for genuinamente
+vazia, a política anterior é mantida: não cria snapshot e descarta
+o arraste degenerado.
+
+`tests/test_selection_commit_rejection_v039.lua` exercita o limite real
+em um documento 4096×4096 sem rasterizar a tela inteira, recuperação
+após cancelamento, retângulo/laço inválidos, confirmação posterior e
+undo/redo. O núcleo de seleção, o limite de processamento e o formato
+NPNT1–NPNT5 não foram alterados.
